@@ -770,6 +770,7 @@ fun DishEditorScreen(
     assignToDateIdAfterSave: String?,
     isSaving: Boolean,
     onPreviewNormalize: suspend (List<String>) -> List<IngredientItem>,
+    onImportRecipe: suspend (String) -> com.example.domain.ImportedRecipe?,
     onSaveDish: (
         existingDishId: String?,
         name: String,
@@ -805,6 +806,7 @@ fun DishEditorScreen(
 
     var showNormalizedInspector by remember { mutableStateOf(existingDish != null && existingDish.ingredients.isNotEmpty()) }
     var isNormalizingPreview by remember { mutableStateOf(false) }
+    var isImporting by remember { mutableStateOf(false) }
 
     val draftLines = remember(existingDish) {
         val initial = existingDish?.ingredients?.map { ing ->
@@ -1217,6 +1219,41 @@ fun DishEditorScreen(
                     .fillMaxWidth()
                     .testTag("dish_recipe_url_input")
             )
+
+            // Importeer ingrediënten, naam en tijd van de receptlink hierboven
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        isImporting = true
+                        val imported = onImportRecipe(recipeUrl)
+                        isImporting = false
+                        if (imported != null) {
+                            if (name.isBlank() && !imported.name.isNullOrBlank()) name = imported.name
+                            if (prepMinutesText.isBlank() && imported.totalMinutes != null) {
+                                prepMinutesText = imported.totalMinutes.toString()
+                            }
+                            // Vervang de ingrediëntenlijst; de lokale parser maakt er bij het opslaan naam/hoeveelheid van.
+                            draftLines.clear()
+                            imported.ingredientLines.forEach { line ->
+                                draftLines.add(MaaltijdViewModel.DraftIngredientLine(raw = line))
+                            }
+                            showNormalizedInspector = false
+                        }
+                    }
+                },
+                enabled = recipeUrl.isNotBlank() && !isImporting,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("import_recipe_button")
+            ) {
+                if (isImporting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Importeer recept van link")
+            }
 
             // 4b. Bereidingstijd (optioneel)
             OutlinedTextField(

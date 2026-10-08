@@ -14,6 +14,8 @@ import com.example.data.model.IngredientItem
 import com.example.data.model.LooseItem
 import com.example.data.model.WeekChecklist
 import com.example.data.repository.MaaltijdRepository
+import com.example.data.web.RecipeFetcher
+import com.example.domain.ImportedRecipe
 import com.example.domain.MealPlannerLogic
 import com.example.util.PhotoUtils
 import kotlinx.coroutines.Job
@@ -558,6 +560,19 @@ class MaaltijdViewModel(
             rawLines = rawLines,
             isOnline = _uiState.value.isOnline
         )
+    }
+
+    /** Haalt ingrediënten, naam en tijd uit een receptlink. Bij een fout krijgt de gebruiker een melding. */
+    suspend fun importRecipeFromUrl(url: String): ImportedRecipe? {
+        return try {
+            RecipeFetcher.fetch(url)
+        } catch (e: RecipeFetcher.ImportException) {
+            showSnackbar(e.message ?: "Importeren mislukt.")
+            null
+        } catch (e: Exception) {
+            showSnackbar("Importeren mislukt.")
+            null
+        }
     }
 
     fun setDishRating(dish: Dish, rating: Int) {
