@@ -1,0 +1,211 @@
+{
+  "entities": {
+    "Household": {
+      "title": "Household",
+      "description": "Gedeeld huishouden voor twee personen (Rob en Joke) met uitnodigingscode en bewerkbare gerechttypes.",
+      "type": "object",
+      "properties": {
+        "members": {
+          "type": "array",
+          "description": "Lijst van maximaal 2 geauthenticeerde Firebase UID's."
+        },
+        "inviteCode": {
+          "type": "string",
+          "description": "Uitnodigingscode van 6 tekens waarmee het tweede lid kan deelnemen."
+        },
+        "types": {
+          "type": "array",
+          "description": "Lijst van beschikbare gerechttypes binnen het huishouden."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "UID van de gebruiker die het huishouden heeft aangemaakt."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp van aanmaak (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp van laatste wijziging (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["members", "inviteCode", "types", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Dish": {
+      "title": "Dish",
+      "description": "Gerecht in de gedeelde gerechtenbibliotheek van het huishouden.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Verplichte naam van het gerecht."
+        },
+        "type": {
+          "type": "string",
+          "description": "Verplicht type uit households.types."
+        },
+        "ingredients": {
+          "type": "array",
+          "description": "Lijst van ingrediënten met raw, name, quantity, unit en needsNormalization."
+        },
+        "recipeUrl": {
+          "type": "string",
+          "description": "Optionele externe receptlink."
+        },
+        "note": {
+          "type": "string",
+          "description": "Optionele notitie bij het gerecht."
+        },
+        "photoUrl": {
+          "type": "string",
+          "description": "Optionele gecomprimeerde foto data-URI of URL."
+        },
+        "needsNormalization": {
+          "type": "boolean",
+          "description": "Geeft aan of ingrediënten nog genormaliseerd moeten worden zodra er verbinding is."
+        },
+        "pendingPhotoUpload": {
+          "type": "boolean",
+          "description": "Geeft aan of een lokale foto nog gesynchroniseerd moet worden."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "UID van de aanmaker."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp van aanmaak."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp van laatste update."
+        }
+      },
+      "required": ["name", "type", "ingredients", "createdBy", "createdAt", "updatedAt"]
+    },
+    "DayPlan": {
+      "title": "DayPlan",
+      "description": "Geplande avondmaaltijd of status voor een specifieke datum (yyyy-MM-dd).",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["leeg", "koken", "afhaal", "opwarm", "niet_koken"],
+          "description": "Type invulling van de dag."
+        },
+        "dishId": {
+          "type": "string",
+          "description": "Optioneel ID van het gekozen gerecht (enkel bij kind = koken)."
+        },
+        "dishSnapshot": {
+          "type": "object",
+          "description": "Snapshot van het gerecht op het moment van plannen (name, type, ingredients, recipeUrl, note, photoUrl)."
+        },
+        "note": {
+          "type": "string",
+          "description": "Optioneel vrij tekstveld voor notities (vooral bij niet_koken en afhaal)."
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "UID van het lid dat de dag laatst heeft bijgewerkt."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp van laatste wijziging."
+        }
+      },
+      "required": ["kind", "updatedBy", "updatedAt"]
+    },
+    "WeekChecklist": {
+      "title": "WeekChecklist",
+      "description": "Afgevinkte status van de gegenereerde boodschappenlijst voor een week (weekStart = zondag yyyy-MM-dd).",
+      "type": "object",
+      "properties": {
+        "checked": {
+          "type": "object",
+          "description": "Map van itemKey (name|unit) naar boolean afvinkstatus."
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "UID van het lid dat laatst heeft afgevinkt."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp van laatste wijziging."
+        }
+      },
+      "required": ["checked", "updatedBy", "updatedAt"]
+    },
+    "LooseItem": {
+      "title": "LooseItem",
+      "description": "Handmatig toegevoegd los item op de boodschappenlijst (eenmalig of vast).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Naam van het losse item."
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Optionele hoeveelheid."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Optionele eenheid."
+        },
+        "recurring": {
+          "type": "boolean",
+          "description": "True voor vast item, false voor eenmalig item."
+        },
+        "checked": {
+          "type": "boolean",
+          "description": "Of het losse item momenteel is afgevinkt."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "UID van de aanmaker."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp van aanmaak."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp van laatste wijziging."
+        }
+      },
+      "required": ["name", "recurring", "checked", "createdBy", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/households/{hid}": {
+      "schema": { "$ref": "#/entities/Household" },
+      "description": "Huishoudensdocument met leden (max 2), uitnodigingscode en gerechttypes."
+    },
+    "/households/{hid}/dishes/{dishId}": {
+      "schema": { "$ref": "#/entities/Dish" },
+      "description": "Gerechtenbibliotheek van het huishouden."
+    },
+    "/households/{hid}/days/{dayId}": {
+      "schema": { "$ref": "#/entities/DayPlan" },
+      "description": "Dagplanning per datum (yyyy-MM-dd)."
+    },
+    "/households/{hid}/weeks/{weekStart}": {
+      "schema": { "$ref": "#/entities/WeekChecklist" },
+      "description": "Afvinkstatus van de automatische boodschappenlijst per week (zondag yyyy-MM-dd)."
+    },
+    "/households/{hid}/looseItems/{itemId}": {
+      "schema": { "$ref": "#/entities/LooseItem" },
+      "description": "Losse boodschappenitems (eenmalig of vast) van het huishouden."
+    }
+  }
+}

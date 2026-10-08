@@ -1,0 +1,256 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isHouseholdMember(hid) {
+      return isSignedIn() &&
+             isValidId(hid) &&
+             exists(/databases/$(database)/documents/households/$(hid)) &&
+             request.auth.uid in get(/databases/$(database)/documents/households/$(hid)).data.members;
+    }
+
+    function isValidHousehold(data) {
+      return data.keys().hasAll(['members', 'inviteCode', 'types', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['members', 'inviteCode', 'types', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.members is list &&
+             data.members.size() >= 1 &&
+             data.members.size() <= 2 &&
+             data.members[0] is string &&
+             data.members[0].size() >= 1 &&
+             data.members[0].size() <= 128 &&
+             (data.members.size() == 1 || (data.members[1] is string && data.members[1].size() >= 1 && data.members[1].size() <= 128 && data.members[1] != data.members[0])) &&
+             data.inviteCode is string &&
+             data.inviteCode.size() == 6 &&
+             data.types is list &&
+             data.types.size() >= 1 &&
+             data.types.size() <= 50 &&
+             data.types[0] is string &&
+             data.types[0].size() >= 1 &&
+             data.types[0].size() <= 40 &&
+             data.createdBy is string &&
+             data.createdBy.size() >= 1 &&
+             data.createdBy.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidDish(data) {
+      return data.keys().hasAll(['name', 'type', 'ingredients', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 120 &&
+             data.type is string &&
+             data.type.size() >= 1 &&
+             data.type.size() <= 40 &&
+             data.ingredients is list &&
+             data.ingredients.size() <= 100 &&
+             (data.ingredients.size() == 0 || data.ingredients[0] is map) &&
+             (!('recipeUrl' in data) || data.recipeUrl == null || (data.recipeUrl is string && data.recipeUrl.size() <= 1000)) &&
+             (!('note' in data) || data.note == null || (data.note is string && data.note.size() <= 2000)) &&
+             (!('photoUrl' in data) || data.photoUrl == null || (data.photoUrl is string && data.photoUrl.size() <= 350000)) &&
+             (!('needsNormalization' in data) || data.needsNormalization == null || data.needsNormalization is bool) &&
+             (!('pendingPhotoUpload' in data) || data.pendingPhotoUpload == null || data.pendingPhotoUpload is bool) &&
+             data.createdBy is string &&
+             data.createdBy.size() >= 1 &&
+             data.createdBy.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidDay(data) {
+      return data.keys().hasAll(['kind', 'updatedBy', 'updatedAt']) &&
+             data.keys().hasOnly(['kind', 'dishId', 'dishSnapshot', 'note', 'updatedBy', 'updatedAt']) &&
+             data.kind is string &&
+             data.kind in ['leeg', 'koken', 'afhaal', 'opwarm', 'niet_koken'] &&
+             (!('dishId' in data) || data.dishId == null || (data.dishId is string && data.dishId.size() <= 128)) &&
+             (!('dishSnapshot' in data) || data.dishSnapshot == null || data.dishSnapshot is map) &&
+             (!('note' in data) || data.note == null || (data.note is string && data.note.size() <= 1000)) &&
+             data.updatedBy is string &&
+             data.updatedBy.size() >= 1 &&
+             data.updatedBy.size() <= 128 &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidWeek(data) {
+      return data.keys().hasAll(['checked', 'updatedBy', 'updatedAt']) &&
+             data.keys().hasOnly(['checked', 'updatedBy', 'updatedAt']) &&
+             data.checked is map &&
+             data.checked.size() <= 500 &&
+             data.updatedBy is string &&
+             data.updatedBy.size() >= 1 &&
+             data.updatedBy.size() <= 128 &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidLooseItem(data) {
+      return data.keys().hasAll(['name', 'recurring', 'checked', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['name', 'quantity', 'unit', 'recurring', 'checked', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 120 &&
+             (!('quantity' in data) || data.quantity == null || data.quantity is int || data.quantity is float) &&
+             (!('unit' in data) || data.unit == null || (data.unit is string && data.unit.size() <= 30)) &&
+             data.recurring is bool &&
+             data.checked is bool &&
+             data.createdBy is string &&
+             data.createdBy.size() >= 1 &&
+             data.createdBy.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    match /households/{hid} {
+      allow get: if isSignedIn() && isValidId(hid) && request.auth.uid in existing().members;
+      allow list: if isSignedIn() && request.auth.uid in existing().members;
+
+      allow create: if isSignedIn() &&
+                       isValidId(hid) &&
+                       isValidHousehold(incoming()) &&
+                       incoming().inviteCode == hid &&
+                       incoming().createdBy == request.auth.uid &&
+                       incoming().members.size() == 1 &&
+                       incoming().members[0] == request.auth.uid;
+
+      allow update: if isSignedIn() &&
+                       isValidId(hid) &&
+                       isValidHousehold(incoming()) &&
+                       incoming().inviteCode == existing().inviteCode &&
+                       incoming().createdBy == existing().createdBy &&
+                       incoming().createdAt == existing().createdAt && (
+                         // Action 1: Member updates types
+                         (request.auth.uid in existing().members &&
+                          incoming().members == existing().members &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['types', 'updatedAt'])) ||
+                         // Action 2: Second user joins household via inviteCode
+                         (!(request.auth.uid in existing().members) &&
+                          existing().members.size() == 1 &&
+                          incoming().members.size() == 2 &&
+                          incoming().members[0] == existing().members[0] &&
+                          incoming().members[1] == request.auth.uid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['members', 'updatedAt']))
+                       );
+
+      allow delete: if false;
+
+      match /dishes/{dishId} {
+        allow get: if isSignedIn() && isValidId(hid) && isValidId(dishId) && isHouseholdMember(hid);
+        allow list: if isSignedIn() && isValidId(hid) && isHouseholdMember(hid);
+
+        allow create: if isSignedIn() &&
+                         isValidId(hid) &&
+                         isValidId(dishId) &&
+                         isValidDish(incoming()) &&
+                         incoming().createdBy == request.auth.uid &&
+                         isHouseholdMember(hid);
+
+        allow update: if isSignedIn() &&
+                         isValidId(hid) &&
+                         isValidId(dishId) &&
+                         isValidDish(incoming()) &&
+                         incoming().createdBy == existing().createdBy &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'updatedAt']) &&
+                         isHouseholdMember(hid);
+
+        allow delete: if isSignedIn() && isValidId(hid) && isValidId(dishId) && isHouseholdMember(hid);
+      }
+
+      match /days/{dayId} {
+        allow get: if isSignedIn() && isValidId(hid) && isValidId(dayId) && isHouseholdMember(hid);
+        allow list: if isSignedIn() && isValidId(hid) && isHouseholdMember(hid);
+
+        allow create: if isSignedIn() &&
+                         isValidId(hid) &&
+                         isValidId(dayId) &&
+                         isValidDay(incoming()) &&
+                         incoming().updatedBy == request.auth.uid &&
+                         isHouseholdMember(hid);
+
+        allow update: if isSignedIn() &&
+                         isValidId(hid) &&
+                         isValidId(dayId) &&
+                         isValidDay(incoming()) &&
+                         incoming().updatedBy == request.auth.uid &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['kind', 'dishId', 'dishSnapshot', 'note', 'updatedBy', 'updatedAt']) &&
+                         isHouseholdMember(hid);
+
+        allow delete: if isSignedIn() && isValidId(hid) && isValidId(dayId) && isHouseholdMember(hid);
+      }
+
+      match /weeks/{weekStart} {
+        allow get: if isSignedIn() && isValidId(hid) && isValidId(weekStart) && isHouseholdMember(hid);
+        allow list: if isSignedIn() && isValidId(hid) && isHouseholdMember(hid);
+
+        allow create: if isSignedIn() &&
+                         isValidId(hid) &&
+                         isValidId(weekStart) &&
+                         isValidWeek(incoming()) &&
+                         incoming().updatedBy == request.auth.uid &&
+                         isHouseholdMember(hid);
+
+        allow update: if isSignedIn() &&
+                         isValidId(hid) &&
+                         isValidId(weekStart) &&
+                         isValidWeek(incoming()) &&
+                         incoming().updatedBy == request.auth.uid &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['checked', 'updatedBy', 'updatedAt']) &&
+                         isHouseholdMember(hid);
+
+        allow delete: if isSignedIn() && isValidId(hid) && isValidId(weekStart) && isHouseholdMember(hid);
+      }
+
+      match /looseItems/{itemId} {
+        allow get: if isSignedIn() && isValidId(hid) && isValidId(itemId) && isHouseholdMember(hid);
+        allow list: if isSignedIn() && isValidId(hid) && isHouseholdMember(hid);
+
+        allow create: if isSignedIn() &&
+                         isValidId(hid) &&
+                         isValidId(itemId) &&
+                         isValidLooseItem(incoming()) &&
+                         incoming().createdBy == request.auth.uid &&
+                         isHouseholdMember(hid);
+
+        allow update: if isSignedIn() &&
+                         isValidId(hid) &&
+                         isValidId(itemId) &&
+                         isValidLooseItem(incoming()) &&
+                         incoming().createdBy == existing().createdBy &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'quantity', 'unit', 'recurring', 'checked', 'updatedAt']) &&
+                         isHouseholdMember(hid);
+
+        allow delete: if isSignedIn() && isValidId(hid) && isValidId(itemId) && isHouseholdMember(hid);
+      }
+    }
+  }
+}

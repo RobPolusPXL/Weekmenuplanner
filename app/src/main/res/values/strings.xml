@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Maaltijdplanner</string>
+    <string name="tab_week">Week</string>
+    <string name="tab_dishes">Gerechten</string>
+    <string name="tab_groceries">Boodschappen</string>
+    <string name="action_pick_for_me">Kies voor mij</string>
+    <string name="action_generate_whole_week">Genereer hele week</string>
+    <string name="action_finish_shopping">Winkelen afronden</string>
+    <string name="msg_no_free_type">Geen vrij type meer, regel genegeerd voor deze dag</string>
+    <string name="msg_empty_library">Voeg eerst gerechten toe</string>
+</resources>

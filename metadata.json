@@ -1,0 +1,6 @@
+{
+  "name": "Maaltijdplanner",
+  "description": "Gedeelde weekplanner en automatische boodschappenlijst voor avondmaaltijden van Rob en Joke.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
