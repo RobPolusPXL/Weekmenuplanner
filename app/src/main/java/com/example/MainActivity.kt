@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -220,36 +221,47 @@ fun AuthenticatedAppContent(
             )
         }
         isEditorOpen -> {
-            DishEditorScreen(
-                existingDish = editingDish,
-                dishTypes = uiState.dishTypes,
-                assignToDateIdAfterSave = assignToDateIdOnSave,
-                isSaving = uiState.isSavingDish,
-                onPreviewNormalize = { lines -> viewModel.previewNormalizeIngredients(lines) },
-                onSaveDish = { existingId, name, type, drafts, recipeUrl, note, photo, existingPhotoUrl, assignDateId ->
-                    viewModel.saveDishWithNormalization(
-                        existingDishId = existingId,
-                        name = name,
-                        type = type,
-                        draftIngredients = drafts,
-                        recipeUrl = recipeUrl,
-                        note = note,
-                        processedPhoto = photo,
-                        existingPhotoUrl = existingPhotoUrl,
-                        assignToDateIdAfterSave = assignDateId,
-                        onSavedSuccess = {
-                            isEditorOpen = false
-                            editingDish = null
-                            assignToDateIdOnSave = null
-                        }
-                    )
-                },
-                onCancel = {
-                    isEditorOpen = false
-                    editingDish = null
-                    assignToDateIdOnSave = null
-                }
-            )
+            // De editor staat buiten de hoofd-Scaffold, dus had hij geen SnackbarHost: foutmeldingen bij
+            // opslaan (bv. PERMISSION_DENIED) werden getoond aan niemand. Deze Box legt er één overheen.
+            Box(modifier = Modifier.fillMaxSize()) {
+                DishEditorScreen(
+                    existingDish = editingDish,
+                    dishTypes = uiState.dishTypes,
+                    assignToDateIdAfterSave = assignToDateIdOnSave,
+                    isSaving = uiState.isSavingDish,
+                    onPreviewNormalize = { lines -> viewModel.previewNormalizeIngredients(lines) },
+                    onSaveDish = { existingId, name, type, drafts, recipeUrl, note, photo, existingPhotoUrl, assignDateId ->
+                        viewModel.saveDishWithNormalization(
+                            existingDishId = existingId,
+                            name = name,
+                            type = type,
+                            draftIngredients = drafts,
+                            recipeUrl = recipeUrl,
+                            note = note,
+                            processedPhoto = photo,
+                            existingPhotoUrl = existingPhotoUrl,
+                            assignToDateIdAfterSave = assignDateId,
+                            onSavedSuccess = {
+                                isEditorOpen = false
+                                editingDish = null
+                                assignToDateIdOnSave = null
+                            }
+                        )
+                    },
+                    onCancel = {
+                        isEditorOpen = false
+                        editingDish = null
+                        assignToDateIdOnSave = null
+                    }
+                )
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 88.dp)
+                )
+            }
         }
         else -> {
             val household = uiState.household!!
