@@ -472,6 +472,7 @@ fun AuthenticatedAppContent(
                                 onDeleteDish = { dish ->
                                     viewModel.deleteDish(dish)
                                 },
+                                onRateDish = { dish, rating -> viewModel.setDishRating(dish, rating) },
                                 onAddType = { newType -> viewModel.addDishType(newType) },
                                 onRenameType = { oldType, newType -> viewModel.renameDishType(oldType, newType) },
                                 onDeleteType = { typeToRemove -> viewModel.deleteDishType(typeToRemove) }

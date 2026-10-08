@@ -306,6 +306,25 @@ class MaaltijdRepository(
         }
     }
 
+    /** Zet alleen de sterrenwaardering (0-5) van een gerecht; raakt verder niets aan. */
+    suspend fun setDishRating(hid: String, dishId: String, rating: Int): Result<Unit> {
+        val path = "households/$hid/dishes/$dishId"
+        return try {
+            requireUserId()
+            db.collection("households").document(hid).collection("dishes").document(dishId)
+                .update(
+                    mapOf(
+                        "rating" to rating.coerceIn(0, 5),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
     suspend fun deleteDish(hid: String, dishId: String): Result<Unit> {
         val path = "households/$hid/dishes/$dishId"
         return try {
