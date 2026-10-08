@@ -190,7 +190,8 @@ class MaaltijdRepository(
         note: String?,
         photoUrl: String?,
         needsNormalization: Boolean = ingredients.any { it.needsNormalization },
-        pendingPhotoUpload: Boolean = false
+        pendingPhotoUpload: Boolean = false,
+        prepMinutes: Int? = null
     ): Result<Dish> {
         val dishesPath = "households/$hid/dishes"
         return try {
@@ -207,6 +208,7 @@ class MaaltijdRepository(
             val cleanRecipeUrl = recipeUrl?.trim()?.takeIf { it.isNotEmpty() }
             val cleanNote = note?.trim()?.takeIf { it.isNotEmpty() }
             val cleanPhotoUrl = photoUrl?.trim()?.takeIf { it.isNotEmpty() }
+            val cleanPrepMinutes = prepMinutes?.takeIf { it in 1..1440 }
 
             if (existingDishId.isNullOrBlank()) {
                 val createPayload = mutableMapOf<String, Any>(
@@ -222,6 +224,7 @@ class MaaltijdRepository(
                 if (cleanRecipeUrl != null) createPayload["recipeUrl"] = cleanRecipeUrl
                 if (cleanNote != null) createPayload["note"] = cleanNote
                 if (cleanPhotoUrl != null) createPayload["photoUrl"] = cleanPhotoUrl
+                if (cleanPrepMinutes != null) createPayload["prepMinutes"] = cleanPrepMinutes
 
                 docRef.set(createPayload).await()
             } else {
@@ -232,6 +235,7 @@ class MaaltijdRepository(
                     "recipeUrl" to cleanRecipeUrl,
                     "note" to cleanNote,
                     "photoUrl" to cleanPhotoUrl,
+                    "prepMinutes" to cleanPrepMinutes,
                     "needsNormalization" to needsNormalization,
                     "pendingPhotoUpload" to pendingPhotoUpload,
                     "updatedAt" to FieldValue.serverTimestamp()
@@ -249,6 +253,7 @@ class MaaltijdRepository(
                 photoUrl = cleanPhotoUrl,
                 needsNormalization = needsNormalization,
                 pendingPhotoUpload = pendingPhotoUpload,
+                prepMinutes = cleanPrepMinutes,
                 createdBy = uid
             )
             Result.success(savedDish)

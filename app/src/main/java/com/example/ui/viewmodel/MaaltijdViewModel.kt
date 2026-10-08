@@ -448,6 +448,7 @@ class MaaltijdViewModel(
         processedPhoto: PhotoUtils.ProcessedPhoto?,
         existingPhotoUrl: String?,
         assignToDateIdAfterSave: String? = null,
+        prepMinutes: Int? = null,
         onSavedSuccess: () -> Unit
     ) {
         val state = _uiState.value
@@ -520,7 +521,8 @@ class MaaltijdViewModel(
                     note = note,
                     photoUrl = finalPhotoUrl,
                     needsNormalization = needsNorm,
-                    pendingPhotoUpload = pendingPhoto
+                    pendingPhotoUpload = pendingPhoto,
+                    prepMinutes = prepMinutes
                 )
 
                 saveRes.onSuccess { savedDish ->
