@@ -16,8 +16,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -763,6 +766,8 @@ fun DishEditorScreen(
     }
 
     Scaffold(
+        // Titelbalk: statusBarsPadding() zorgt dat de inhoud onder de statusbalk (batterij, klok) begint.
+        // De Surface tekent wel nog achter de statusbalk, zodat de kleur doorloopt (edge-to-edge).
         topBar = {
             Surface(
                 color = MaterialTheme.colorScheme.surface,
@@ -771,33 +776,57 @@ fun DishEditorScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .statusBarsPadding()
                         .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = onCancel,
-                            modifier = Modifier.testTag("editor_back_button")
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Terug")
-                        }
-                        Column {
+                    IconButton(
+                        onClick = onCancel,
+                        modifier = Modifier.testTag("editor_back_button")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Terug")
+                    }
+                    Column {
+                        Text(
+                            text = if (existingDish == null) "Nieuw gerecht" else "Gerecht bewerken",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        if (!assignToDateIdAfterSave.isNullOrBlank()) {
+                            val targetDate = MealPlannerLogic.parseIsoDate(assignToDateIdAfterSave)
                             Text(
-                                text = if (existingDish == null) "Nieuw gerecht" else "Gerecht bewerken",
-                                style = MaterialTheme.typography.titleLarge
+                                text = "Wordt meteen gepland op ${targetDate?.let { MealPlannerLogic.getDutchDayName(it) + " " + it.toBelgianString() } ?: assignToDateIdAfterSave}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
                             )
-                            if (!assignToDateIdAfterSave.isNullOrBlank()) {
-                                val targetDate = MealPlannerLogic.parseIsoDate(assignToDateIdAfterSave)
-                                Text(
-                                    text = "Wordt meteen gepland op ${targetDate?.let { MealPlannerLogic.getDutchDayName(it) + " " + it.toBelgianString() } ?: assignToDateIdAfterSave}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
                         }
                     }
-
+                }
+            }
+        },
+        // Actiebalk onderaan: Opslaan staat binnen duimbereik en kan nooit onder de statusbalk belanden.
+        // navigationBarsPadding() houdt de knoppen boven de gesture-/navigatiebalk van Android.
+        bottomBar = {
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = onCancel,
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("editor_cancel_button")
+                    ) {
+                        Text("Annuleren")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
                             onSaveDish(
@@ -813,7 +842,9 @@ fun DishEditorScreen(
                             )
                         },
                         enabled = !isSaving && name.isNotBlank() && selectedType.isNotBlank(),
-                        modifier = Modifier.testTag("save_dish_button")
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("save_dish_button")
                     ) {
                         if (isSaving) {
                             CircularProgressIndicator(

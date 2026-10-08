@@ -451,7 +451,12 @@ class MaaltijdViewModel(
         onSavedSuccess: () -> Unit
     ) {
         val state = _uiState.value
-        val hid = state.household?.id ?: return
+        val hid = state.household?.id ?: run {
+            // Zonder huishouden is er geen pad om naar te schrijven. Vroeger keerde de functie hier stil terug,
+            // waardoor Opslaan leek te "doen niets". Nu krijgt de gebruiker een duidelijke melding.
+            showSnackbar("Opslaan mislukt: er is nog geen huishouden geladen. Probeer het zo opnieuw.")
+            return
+        }
         if (name.isBlank() || type.isBlank()) {
             showSnackbar("Naam en type zijn verplicht.")
             return
