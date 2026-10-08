@@ -54,7 +54,7 @@ object RecipeFetcher {
             if (code !in 200..299) {
                 throw ImportException("De site gaf foutcode $code. Typ de ingrediënten zelf in.")
             }
-            val charset = Regex("charset=([\\w-]+)", RegexOption.IGNORE_CASE)
+            val responseCharset = Regex("charset=([\\w-]+)", RegexOption.IGNORE_CASE)
                 .find(conn.contentType ?: "")?.groupValues?.get(1)
                 ?.let { runCatching { charset(it) }.getOrNull() }
                 ?: Charsets.UTF_8
@@ -67,7 +67,7 @@ object RecipeFetcher {
                     out.write(buffer, 0, read)
                 }
             }
-            return out.toString(charset.name())
+            return out.toString(responseCharset.name())
         } finally {
             conn.disconnect()
         }
