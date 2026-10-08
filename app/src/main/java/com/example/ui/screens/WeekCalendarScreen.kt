@@ -70,6 +70,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -389,11 +390,14 @@ private fun DayRowCard(
     val dateFormatted = date.toBelgianString()
     val kind = plan?.dayKind ?: DayKind.LEEG
 
+    // Altijd een egale (ondoorzichtige) kleur: een doorzichtige kaart toont de schaduw eronder
+    // als een lichtere rechthoek. Daarom rekenen we de tint vooraf uit over de achtergrondkleur.
+    val baseSurface = MaterialTheme.colorScheme.surface
     val containerColor = when {
-        isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-        kind == DayKind.KOKEN -> MaterialTheme.colorScheme.surface
-        kind != DayKind.LEEG -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
-        else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+        isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f).compositeOver(baseSurface)
+        kind == DayKind.KOKEN -> baseSurface
+        kind != DayKind.LEEG -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f).compositeOver(baseSurface)
+        else -> baseSurface
     }
 
     val borderColor = if (isToday) {
@@ -415,7 +419,7 @@ private fun DayRowCard(
             .testTag("day_row_${date.toIsoString()}"),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (kind == DayKind.KOKEN) 1.dp else 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
