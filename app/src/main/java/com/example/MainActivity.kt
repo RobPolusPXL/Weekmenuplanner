@@ -230,6 +230,7 @@ fun AuthenticatedAppContent(
                     assignToDateIdAfterSave = assignToDateIdOnSave,
                     isSaving = uiState.isSavingDish,
                     onPreviewNormalize = { lines -> viewModel.previewNormalizeIngredients(lines) },
+                    onImportRecipe = { url -> viewModel.importRecipeFromUrl(url) },
                     onSaveDish = { existingId, name, type, drafts, recipeUrl, note, photo, existingPhotoUrl, assignDateId, prepMinutes ->
                         viewModel.saveDishWithNormalization(
                             existingDishId = existingId,
