@@ -41,6 +41,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -74,6 +76,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -99,6 +102,7 @@ fun DishesLibraryScreen(
     onOpenNewDish: () -> Unit,
     onOpenEditDish: (Dish) -> Unit,
     onDeleteDish: (Dish) -> Unit,
+    onRateDish: (Dish, Int) -> Unit,
     onAddType: (String) -> Unit,
     onRenameType: (String, String) -> Unit,
     onDeleteType: (String) -> Unit
@@ -277,6 +281,7 @@ fun DishesLibraryScreen(
         val latestDish = uiState.dishes.firstOrNull { it.id == currentDish.id } ?: currentDish
         DishLibraryDetailDialog(
             dish = latestDish,
+            onRate = { onRateDish(latestDish, it) },
             onDismiss = { viewingDish = null },
             onEdit = {
                 viewingDish = null
@@ -298,6 +303,34 @@ fun DishesLibraryScreen(
             onRenameType = onRenameType,
             onDeleteType = onDeleteType
         )
+    }
+}
+
+/** Rij van 5 sterren. Zonder [onRatingChange] is de rij alleen-lezen. */
+@Composable
+fun StarRatingRow(
+    rating: Int,
+    modifier: Modifier = Modifier,
+    starSize: androidx.compose.ui.unit.Dp = 20.dp,
+    onRatingChange: ((Int) -> Unit)? = null
+) {
+    val gold = Color(0xFFFFB300)
+    Row(modifier = modifier) {
+        for (i in 1..5) {
+            val filled = i <= rating
+            val icon = if (filled) Icons.Default.Star else Icons.Default.StarBorder
+            val tint = if (filled) gold else MaterialTheme.colorScheme.outline
+            if (onRatingChange != null) {
+                IconButton(
+                    onClick = { onRatingChange(i) },
+                    modifier = Modifier.size(starSize + 12.dp).testTag("rating_star_$i")
+                ) {
+                    Icon(icon, contentDescription = "$i ster${if (i > 1) "ren" else ""}", tint = tint, modifier = Modifier.size(starSize))
+                }
+            } else {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(starSize))
+            }
+        }
     }
 }
 
@@ -342,6 +375,10 @@ private fun DishLibraryItemCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (dish.rating > 0) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    StarRatingRow(rating = dish.rating, starSize = 14.dp)
+                }
                 Spacer(modifier = Modifier.height(4.dp))
                 val ingSummary = dish.ingredients.take(4).joinToString(", ") { it.name.ifBlank { it.raw } }
                 Text(
@@ -390,6 +427,7 @@ private fun DishLibraryItemCard(
 @Composable
 private fun DishLibraryDetailDialog(
     dish: Dish,
+    onRate: (Int) -> Unit,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -414,6 +452,13 @@ private fun DishLibraryDetailDialog(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                     )
                 }
+                Spacer(modifier = Modifier.height(6.dp))
+                // Tik op een ster om te beoordelen; tik op dezelfde ster nog eens om te wissen.
+                StarRatingRow(
+                    rating = dish.rating,
+                    starSize = 32.dp,
+                    onRatingChange = { newRating -> onRate(if (newRating == dish.rating) 0 else newRating) }
+                )
             }
         },
         text = {

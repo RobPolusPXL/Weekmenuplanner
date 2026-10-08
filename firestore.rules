@@ -59,7 +59,7 @@ service cloud.firestore {
 
     function isValidDish(data) {
       return data.keys().hasAll(['name', 'type', 'ingredients', 'createdBy', 'createdAt', 'updatedAt']) &&
-             data.keys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'rating', 'createdBy', 'createdAt', 'updatedAt']) &&
              data.name is string &&
              data.name.size() >= 1 &&
              data.name.size() <= 120 &&
@@ -74,6 +74,7 @@ service cloud.firestore {
              (!('photoUrl' in data) || data.photoUrl == null || (data.photoUrl is string && data.photoUrl.size() <= 350000)) &&
              (!('needsNormalization' in data) || data.needsNormalization == null || data.needsNormalization is bool) &&
              (!('pendingPhotoUpload' in data) || data.pendingPhotoUpload == null || data.pendingPhotoUpload is bool) &&
+             (!('rating' in data) || (data.rating is int && data.rating >= 0 && data.rating <= 5)) &&
              data.createdBy is string &&
              data.createdBy.size() >= 1 &&
              data.createdBy.size() <= 128 &&
@@ -179,7 +180,7 @@ service cloud.firestore {
                          isValidDish(incoming()) &&
                          incoming().createdBy == existing().createdBy &&
                          incoming().createdAt == existing().createdAt &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'updatedAt']) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'rating', 'updatedAt']) &&
                          isHouseholdMember(hid);
 
         allow delete: if isSignedIn() && isValidId(hid) && isValidId(dishId) && isHouseholdMember(hid);

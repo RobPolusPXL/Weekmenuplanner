@@ -96,6 +96,8 @@ data class Dish(
     val photoUrl: String? = null,
     val needsNormalization: Boolean = false,
     val pendingPhotoUpload: Boolean = false,
+    /** Waardering 1-5 sterren, 0 = nog niet beoordeeld. Gedeeld binnen het huishouden. */
+    val rating: Int = 0,
     val createdBy: String = "",
     val createdAt: Timestamp? = null,
     val updatedAt: Timestamp? = null
@@ -125,6 +127,7 @@ data class Dish(
             val needsNormalization = (data["needsNormalization"] as? Boolean)
                 ?: ingredients.any { it.needsNormalization }
             val pendingPhotoUpload = (data["pendingPhotoUpload"] as? Boolean) ?: false
+            val rating = ((data["rating"] as? Number)?.toInt() ?: 0).coerceIn(0, 5)
             val createdBy = (data["createdBy"] as? String) ?: ""
             val createdAt = doc.getTimestamp("createdAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
             val updatedAt = doc.getTimestamp("updatedAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
@@ -139,6 +142,7 @@ data class Dish(
                 photoUrl = photoUrl,
                 needsNormalization = needsNormalization,
                 pendingPhotoUpload = pendingPhotoUpload,
+                rating = rating,
                 createdBy = createdBy,
                 createdAt = createdAt,
                 updatedAt = updatedAt

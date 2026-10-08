@@ -558,6 +558,14 @@ class MaaltijdViewModel(
         )
     }
 
+    fun setDishRating(dish: Dish, rating: Int) {
+        val hid = _uiState.value.household?.id ?: return
+        viewModelScope.launch {
+            repository.setDishRating(hid, dish.id, rating)
+                .onFailure { showSnackbar(it.localizedMessage ?: "Waardering opslaan mislukt.") }
+        }
+    }
+
     fun deleteDish(dish: Dish) {
         val hid = _uiState.value.household?.id ?: return
         viewModelScope.launch {

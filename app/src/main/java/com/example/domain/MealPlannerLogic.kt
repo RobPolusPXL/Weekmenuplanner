@@ -120,6 +120,28 @@ object MealPlannerLogic {
         data class Chosen(val dish: Dish, val ruleIgnored: Boolean) : PickResult
     }
 
+    /**
+     * Gewicht van een gerecht bij "kies voor mij": meer sterren = grotere kans.
+     * Niet beoordeeld (0) telt als 3 sterren, zodat nieuwe gerechten gewoon meedoen.
+     */
+    fun ratingWeight(dish: Dish): Int = when (dish.rating) {
+        1 -> 1
+        2 -> 2
+        4 -> 5
+        5 -> 8
+        else -> 3
+    }
+
+    internal fun pickWeighted(candidates: List<Dish>, random: Random): Dish {
+        val total = candidates.sumOf { ratingWeight(it) }
+        var roll = random.nextInt(total)
+        for (dish in candidates) {
+            roll -= ratingWeight(dish)
+            if (roll < 0) return dish
+        }
+        return candidates.last()
+    }
+
     fun pickDishForDay(
         targetDateId: String,
         weekPlans: Map<String, DayPlan>,
@@ -142,14 +164,14 @@ object MealPlannerLogic {
         }
 
         if (strictCandidates.isNotEmpty()) {
-            val chosen = strictCandidates[random.nextInt(strictCandidates.size)]
+            val chosen = pickWeighted(strictCandidates, random)
             return PickResult.Chosen(dish = chosen, ruleIgnored = false)
         }
 
         // Fallback: Geen vrij type meer, kies willekeurig uit alle gerechten buiten het huidige gerecht
         val fallbackCandidates = allDishes.filter { it.id != currentDishIdOnDay }
             .ifEmpty { allDishes }
-        val chosen = fallbackCandidates[random.nextInt(fallbackCandidates.size)]
+        val chosen = pickWeighted(fallbackCandidates, random)
         return PickResult.Chosen(dish = chosen, ruleIgnored = true)
     }
 
