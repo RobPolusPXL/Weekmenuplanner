@@ -230,7 +230,7 @@ fun AuthenticatedAppContent(
                     assignToDateIdAfterSave = assignToDateIdOnSave,
                     isSaving = uiState.isSavingDish,
                     onPreviewNormalize = { lines -> viewModel.previewNormalizeIngredients(lines) },
-                    onSaveDish = { existingId, name, type, drafts, recipeUrl, note, photo, existingPhotoUrl, assignDateId ->
+                    onSaveDish = { existingId, name, type, drafts, recipeUrl, note, photo, existingPhotoUrl, assignDateId, prepMinutes ->
                         viewModel.saveDishWithNormalization(
                             existingDishId = existingId,
                             name = name,
@@ -241,6 +241,7 @@ fun AuthenticatedAppContent(
                             processedPhoto = photo,
                             existingPhotoUrl = existingPhotoUrl,
                             assignToDateIdAfterSave = assignDateId,
+                            prepMinutes = prepMinutes,
                             onSavedSuccess = {
                                 isEditorOpen = false
                                 editingDish = null
