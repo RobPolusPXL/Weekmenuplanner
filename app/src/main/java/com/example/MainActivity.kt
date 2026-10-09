@@ -20,12 +20,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.ShoppingCart
@@ -75,6 +77,7 @@ import com.example.ui.auth.signOut
 import com.example.ui.screens.DishEditorScreen
 import com.example.ui.screens.DishesLibraryScreen
 import com.example.ui.screens.GroceryListScreen
+import com.example.ui.screens.StatsScreen
 import com.example.ui.screens.WeekCalendarScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.MaaltijdViewModel
@@ -116,7 +119,8 @@ enum class MainTab(
 ) {
     WEEK("week", "Week", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
     GERECHTEN("gerechten", "Gerechten", Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
-    BOODSCHAPPEN("boodschappen", "Boodschappen", Icons.Filled.ShoppingCart, Icons.Outlined.ShoppingCart)
+    BOODSCHAPPEN("boodschappen", "Boodschappen", Icons.Filled.ShoppingCart, Icons.Outlined.ShoppingCart),
+    STATISTIEKEN("statistieken", "Statistieken", Icons.Filled.BarChart, Icons.Outlined.BarChart)
 }
 
 @Composable
@@ -503,6 +507,9 @@ fun AuthenticatedAppContent(
                                     viewModel.finishShopping()
                                 }
                             )
+                        }
+                        MainTab.STATISTIEKEN -> {
+                            StatsScreen(uiState = uiState)
                         }
                     }
                 }
