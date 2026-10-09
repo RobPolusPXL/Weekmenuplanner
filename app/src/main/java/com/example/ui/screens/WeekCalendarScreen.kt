@@ -735,10 +735,6 @@ private fun EmptyDayBottomSheet(
     }
 }
 
-/**
- * 5.2 Dagdetail Bottom Sheet
- */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 private val SwapGreen = Color(0xFF2E7D32)
 
 private fun dayContentSummary(plan: DayPlan?): String = when {
@@ -805,6 +801,10 @@ private fun SwapDayDialog(
     )
 }
 
+/**
+ * 5.2 Dagdetail Bottom Sheet
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun DayDetailBottomSheet(
     date: MealPlannerLogic.SimpleDate,
