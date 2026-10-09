@@ -423,6 +423,46 @@ class MaaltijdRepository(
         }
     }
 
+    /**
+     * Wisselt de inhoud van twee dagen in één batch: dag A krijgt het plan van B en omgekeerd.
+     * Een lege dag (geen plan) telt als "leeg", dus wisselen met een lege dag verplaatst het gerecht.
+     */
+    suspend fun swapDays(
+        hid: String,
+        dateIdA: String,
+        planA: DayPlan?,
+        dateIdB: String,
+        planB: DayPlan?
+    ): Result<Unit> {
+        val path = "households/$hid/days"
+        return try {
+            val uid = requireUserId()
+            val daysCol = db.collection("households").document(hid).collection("days")
+            val batch = db.batch()
+            batch.set(daysCol.document(dateIdA), dayPayloadFrom(planB, uid))
+            batch.set(daysCol.document(dateIdB), dayPayloadFrom(planA, uid))
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, path)
+            Result.failure(e)
+        }
+    }
+
+    private fun dayPayloadFrom(plan: DayPlan?, uid: String): Map<String, Any> {
+        val payload = mutableMapOf<String, Any>(
+            "kind" to (plan?.kind ?: DayKind.LEEG.wireValue),
+            "updatedBy" to uid,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        if (plan != null) {
+            plan.dishId?.let { payload["dishId"] = it }
+            plan.dishSnapshot?.let { payload["dishSnapshot"] = it.toMap() }
+            plan.note?.let { payload["note"] = it }
+        }
+        return payload
+    }
+
     suspend fun clearDay(hid: String, dateId: String): Result<Unit> {
         val path = "households/$hid/days/$dateId"
         return try {
