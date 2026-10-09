@@ -443,6 +443,7 @@ fun AuthenticatedAppContent(
                                 onClearDay = { dateId ->
                                     viewModel.clearDay(dateId)
                                 },
+                                onSwapDays = { dateA, dateB -> viewModel.swapDays(dateA, dateB) },
                                 onCopyPastDayToCurrentWeek = { sourcePlan, targetDateId ->
                                     viewModel.copyPastDayToCurrentWeekDay(sourcePlan, targetDateId)
                                 },

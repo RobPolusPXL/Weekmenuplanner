@@ -391,6 +391,16 @@ class MaaltijdViewModel(
         }
     }
 
+    fun swapDays(dateIdA: String, dateIdB: String) {
+        if (dateIdA == dateIdB) return
+        val state = _uiState.value
+        val hid = state.household?.id ?: return
+        viewModelScope.launch {
+            repository.swapDays(hid, dateIdA, state.allDays[dateIdA], dateIdB, state.allDays[dateIdB])
+                .onFailure { e -> showSnackbar(e.localizedMessage ?: "Fout bij wisselen van dagen.") }
+        }
+    }
+
     fun clearDay(dateId: String) {
         val hid = _uiState.value.household?.id ?: return
         viewModelScope.launch {
