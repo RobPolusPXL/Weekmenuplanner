@@ -190,7 +190,8 @@ class MaaltijdRepository(
         note: String?,
         photoUrl: String?,
         needsNormalization: Boolean = ingredients.any { it.needsNormalization },
-        pendingPhotoUpload: Boolean = false
+        pendingPhotoUpload: Boolean = false,
+        prepMinutes: Int? = null
     ): Result<Dish> {
         val dishesPath = "households/$hid/dishes"
         return try {
@@ -207,6 +208,7 @@ class MaaltijdRepository(
             val cleanRecipeUrl = recipeUrl?.trim()?.takeIf { it.isNotEmpty() }
             val cleanNote = note?.trim()?.takeIf { it.isNotEmpty() }
             val cleanPhotoUrl = photoUrl?.trim()?.takeIf { it.isNotEmpty() }
+            val cleanPrepMinutes = prepMinutes?.takeIf { it in 1..1440 }
 
             if (existingDishId.isNullOrBlank()) {
                 val createPayload = mutableMapOf<String, Any>(
@@ -222,6 +224,7 @@ class MaaltijdRepository(
                 if (cleanRecipeUrl != null) createPayload["recipeUrl"] = cleanRecipeUrl
                 if (cleanNote != null) createPayload["note"] = cleanNote
                 if (cleanPhotoUrl != null) createPayload["photoUrl"] = cleanPhotoUrl
+                if (cleanPrepMinutes != null) createPayload["prepMinutes"] = cleanPrepMinutes
 
                 docRef.set(createPayload).await()
             } else {
@@ -232,6 +235,7 @@ class MaaltijdRepository(
                     "recipeUrl" to cleanRecipeUrl,
                     "note" to cleanNote,
                     "photoUrl" to cleanPhotoUrl,
+                    "prepMinutes" to cleanPrepMinutes,
                     "needsNormalization" to needsNormalization,
                     "pendingPhotoUpload" to pendingPhotoUpload,
                     "updatedAt" to FieldValue.serverTimestamp()
@@ -249,6 +253,7 @@ class MaaltijdRepository(
                 photoUrl = cleanPhotoUrl,
                 needsNormalization = needsNormalization,
                 pendingPhotoUpload = pendingPhotoUpload,
+                prepMinutes = cleanPrepMinutes,
                 createdBy = uid
             )
             Result.success(savedDish)
@@ -299,6 +304,25 @@ class MaaltijdRepository(
             }
 
             batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
+    /** Zet alleen de sterrenwaardering (0-5) van een gerecht; raakt verder niets aan. */
+    suspend fun setDishRating(hid: String, dishId: String, rating: Int): Result<Unit> {
+        val path = "households/$hid/dishes/$dishId"
+        return try {
+            requireUserId()
+            db.collection("households").document(hid).collection("dishes").document(dishId)
+                .update(
+                    mapOf(
+                        "rating" to rating.coerceIn(0, 5),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
             Result.success(Unit)
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.UPDATE, path)
@@ -397,6 +421,46 @@ class MaaltijdRepository(
             handleFirestoreError(e, OperationType.WRITE, path)
             Result.failure(e)
         }
+    }
+
+    /**
+     * Wisselt de inhoud van twee dagen in één batch: dag A krijgt het plan van B en omgekeerd.
+     * Een lege dag (geen plan) telt als "leeg", dus wisselen met een lege dag verplaatst het gerecht.
+     */
+    suspend fun swapDays(
+        hid: String,
+        dateIdA: String,
+        planA: DayPlan?,
+        dateIdB: String,
+        planB: DayPlan?
+    ): Result<Unit> {
+        val path = "households/$hid/days"
+        return try {
+            val uid = requireUserId()
+            val daysCol = db.collection("households").document(hid).collection("days")
+            val batch = db.batch()
+            batch.set(daysCol.document(dateIdA), dayPayloadFrom(planB, uid))
+            batch.set(daysCol.document(dateIdB), dayPayloadFrom(planA, uid))
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, path)
+            Result.failure(e)
+        }
+    }
+
+    private fun dayPayloadFrom(plan: DayPlan?, uid: String): Map<String, Any> {
+        val payload = mutableMapOf<String, Any>(
+            "kind" to (plan?.kind ?: DayKind.LEEG.wireValue),
+            "updatedBy" to uid,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        if (plan != null) {
+            plan.dishId?.let { payload["dishId"] = it }
+            plan.dishSnapshot?.let { payload["dishSnapshot"] = it.toMap() }
+            plan.note?.let { payload["note"] = it }
+        }
+        return payload
     }
 
     suspend fun clearDay(hid: String, dateId: String): Result<Unit> {

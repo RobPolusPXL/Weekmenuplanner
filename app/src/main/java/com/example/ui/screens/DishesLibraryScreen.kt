@@ -16,8 +16,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -37,7 +40,10 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -71,6 +77,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -79,6 +86,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import com.example.data.model.Dish
 import com.example.data.model.IngredientItem
 import com.example.domain.MealPlannerLogic
@@ -96,6 +105,7 @@ fun DishesLibraryScreen(
     onOpenNewDish: () -> Unit,
     onOpenEditDish: (Dish) -> Unit,
     onDeleteDish: (Dish) -> Unit,
+    onRateDish: (Dish, Int) -> Unit,
     onAddType: (String) -> Unit,
     onRenameType: (String, String) -> Unit,
     onDeleteType: (String) -> Unit
@@ -274,6 +284,7 @@ fun DishesLibraryScreen(
         val latestDish = uiState.dishes.firstOrNull { it.id == currentDish.id } ?: currentDish
         DishLibraryDetailDialog(
             dish = latestDish,
+            onRate = { onRateDish(latestDish, it) },
             onDismiss = { viewingDish = null },
             onEdit = {
                 viewingDish = null
@@ -295,6 +306,58 @@ fun DishesLibraryScreen(
             onRenameType = onRenameType,
             onDeleteType = onDeleteType
         )
+    }
+}
+
+/** Kleine "⏱ 45 min" / "1 u 15 min" label. */
+@Composable
+fun PrepTimeLabel(minutes: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = Icons.Default.Schedule,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(modifier = Modifier.width(3.dp))
+        Text(
+            text = formatPrepTime(minutes),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+fun formatPrepTime(minutes: Int): String =
+    if (minutes < 60) "$minutes min"
+    else if (minutes % 60 == 0) "${minutes / 60} u"
+    else "${minutes / 60} u ${minutes % 60} min"
+
+/** Rij van 5 sterren. Zonder [onRatingChange] is de rij alleen-lezen. */
+@Composable
+fun StarRatingRow(
+    rating: Int,
+    modifier: Modifier = Modifier,
+    starSize: androidx.compose.ui.unit.Dp = 20.dp,
+    onRatingChange: ((Int) -> Unit)? = null
+) {
+    val gold = Color(0xFFFFB300)
+    Row(modifier = modifier) {
+        for (i in 1..5) {
+            val filled = i <= rating
+            val icon = if (filled) Icons.Default.Star else Icons.Default.StarBorder
+            val tint = if (filled) gold else MaterialTheme.colorScheme.outline
+            if (onRatingChange != null) {
+                IconButton(
+                    onClick = { onRatingChange(i) },
+                    modifier = Modifier.size(starSize + 12.dp).testTag("rating_star_$i")
+                ) {
+                    Icon(icon, contentDescription = "$i ster${if (i > 1) "ren" else ""}", tint = tint, modifier = Modifier.size(starSize))
+                }
+            } else {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(starSize))
+            }
+        }
     }
 }
 
@@ -339,6 +402,14 @@ private fun DishLibraryItemCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (dish.rating > 0 || dish.prepMinutes != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (dish.rating > 0) StarRatingRow(rating = dish.rating, starSize = 14.dp)
+                        if (dish.rating > 0 && dish.prepMinutes != null) Spacer(modifier = Modifier.width(8.dp))
+                        if (dish.prepMinutes != null) PrepTimeLabel(dish.prepMinutes)
+                    }
+                }
                 Spacer(modifier = Modifier.height(4.dp))
                 val ingSummary = dish.ingredients.take(4).joinToString(", ") { it.name.ifBlank { it.raw } }
                 Text(
@@ -387,6 +458,7 @@ private fun DishLibraryItemCard(
 @Composable
 private fun DishLibraryDetailDialog(
     dish: Dish,
+    onRate: (Int) -> Unit,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -410,6 +482,17 @@ private fun DishLibraryDetailDialog(
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                     )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                // Tik op een ster om te beoordelen; tik op dezelfde ster nog eens om te wissen.
+                StarRatingRow(
+                    rating = dish.rating,
+                    starSize = 32.dp,
+                    onRatingChange = { newRating -> onRate(if (newRating == dish.rating) 0 else newRating) }
+                )
+                if (dish.prepMinutes != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    PrepTimeLabel(dish.prepMinutes)
                 }
             }
         },
@@ -687,6 +770,7 @@ fun DishEditorScreen(
     assignToDateIdAfterSave: String?,
     isSaving: Boolean,
     onPreviewNormalize: suspend (List<String>) -> List<IngredientItem>,
+    onImportRecipe: suspend (String) -> com.example.domain.ImportedRecipe?,
     onSaveDish: (
         existingDishId: String?,
         name: String,
@@ -696,7 +780,8 @@ fun DishEditorScreen(
         note: String?,
         processedPhoto: PhotoUtils.ProcessedPhoto?,
         existingPhotoUrl: String?,
-        assignToDateIdAfterSave: String?
+        assignToDateIdAfterSave: String?,
+        prepMinutes: Int?
     ) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -715,11 +800,13 @@ fun DishEditorScreen(
 
     var recipeUrl by remember(existingDish) { mutableStateOf(existingDish?.recipeUrl ?: "") }
     var note by remember(existingDish) { mutableStateOf(existingDish?.note ?: "") }
+    var prepMinutesText by remember(existingDish) { mutableStateOf(existingDish?.prepMinutes?.toString() ?: "") }
     var existingPhotoUrl by remember(existingDish) { mutableStateOf(existingDish?.photoUrl) }
     var processedPhoto by remember { mutableStateOf<PhotoUtils.ProcessedPhoto?>(null) }
 
     var showNormalizedInspector by remember { mutableStateOf(existingDish != null && existingDish.ingredients.isNotEmpty()) }
     var isNormalizingPreview by remember { mutableStateOf(false) }
+    var isImporting by remember { mutableStateOf(false) }
 
     val draftLines = remember(existingDish) {
         val initial = existingDish?.ingredients?.map { ing ->
@@ -763,6 +850,8 @@ fun DishEditorScreen(
     }
 
     Scaffold(
+        // Titelbalk: statusBarsPadding() zorgt dat de inhoud onder de statusbalk (batterij, klok) begint.
+        // De Surface tekent wel nog achter de statusbalk, zodat de kleur doorloopt (edge-to-edge).
         topBar = {
             Surface(
                 color = MaterialTheme.colorScheme.surface,
@@ -771,33 +860,57 @@ fun DishEditorScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .statusBarsPadding()
                         .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = onCancel,
-                            modifier = Modifier.testTag("editor_back_button")
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Terug")
-                        }
-                        Column {
+                    IconButton(
+                        onClick = onCancel,
+                        modifier = Modifier.testTag("editor_back_button")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Terug")
+                    }
+                    Column {
+                        Text(
+                            text = if (existingDish == null) "Nieuw gerecht" else "Gerecht bewerken",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        if (!assignToDateIdAfterSave.isNullOrBlank()) {
+                            val targetDate = MealPlannerLogic.parseIsoDate(assignToDateIdAfterSave)
                             Text(
-                                text = if (existingDish == null) "Nieuw gerecht" else "Gerecht bewerken",
-                                style = MaterialTheme.typography.titleLarge
+                                text = "Wordt meteen gepland op ${targetDate?.let { MealPlannerLogic.getDutchDayName(it) + " " + it.toBelgianString() } ?: assignToDateIdAfterSave}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
                             )
-                            if (!assignToDateIdAfterSave.isNullOrBlank()) {
-                                val targetDate = MealPlannerLogic.parseIsoDate(assignToDateIdAfterSave)
-                                Text(
-                                    text = "Wordt meteen gepland op ${targetDate?.let { MealPlannerLogic.getDutchDayName(it) + " " + it.toBelgianString() } ?: assignToDateIdAfterSave}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
                         }
                     }
-
+                }
+            }
+        },
+        // Actiebalk onderaan: Opslaan staat binnen duimbereik en kan nooit onder de statusbalk belanden.
+        // navigationBarsPadding() houdt de knoppen boven de gesture-/navigatiebalk van Android.
+        bottomBar = {
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = onCancel,
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("editor_cancel_button")
+                    ) {
+                        Text("Annuleren")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
                             onSaveDish(
@@ -809,11 +922,14 @@ fun DishEditorScreen(
                                 note,
                                 processedPhoto,
                                 existingPhotoUrl,
-                                assignToDateIdAfterSave
+                                assignToDateIdAfterSave,
+                                prepMinutesText.trim().toIntOrNull()
                             )
                         },
                         enabled = !isSaving && name.isNotBlank() && selectedType.isNotBlank(),
-                        modifier = Modifier.testTag("save_dish_button")
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("save_dish_button")
                     ) {
                         if (isSaving) {
                             CircularProgressIndicator(
@@ -1102,6 +1218,54 @@ fun DishEditorScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("dish_recipe_url_input")
+            )
+
+            // Importeer ingrediënten, naam en tijd van de receptlink hierboven
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        isImporting = true
+                        val imported = onImportRecipe(recipeUrl)
+                        isImporting = false
+                        if (imported != null) {
+                            if (name.isBlank() && !imported.name.isNullOrBlank()) name = imported.name
+                            if (prepMinutesText.isBlank() && imported.totalMinutes != null) {
+                                prepMinutesText = imported.totalMinutes.toString()
+                            }
+                            // Vervang de ingrediëntenlijst; de lokale parser maakt er bij het opslaan naam/hoeveelheid van.
+                            draftLines.clear()
+                            imported.ingredientLines.forEach { line ->
+                                draftLines.add(MaaltijdViewModel.DraftIngredientLine(raw = line))
+                            }
+                            showNormalizedInspector = false
+                        }
+                    }
+                },
+                enabled = recipeUrl.isNotBlank() && !isImporting,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("import_recipe_button")
+            ) {
+                if (isImporting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Importeer recept van link")
+            }
+
+            // 4b. Bereidingstijd (optioneel)
+            OutlinedTextField(
+                value = prepMinutesText,
+                onValueChange = { input -> prepMinutesText = input.filter { it.isDigit() }.take(4) },
+                label = { Text("Bereidingstijd in minuten (optioneel)") },
+                placeholder = { Text("bv. 30") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("dish_prep_minutes_input")
             )
 
             // 5. Notitie (optioneel)

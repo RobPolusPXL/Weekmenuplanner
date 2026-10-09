@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -70,6 +71,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -100,6 +103,7 @@ fun WeekCalendarScreen(
     onAssignDishToDay: (String, Dish) -> Unit,
     onMarkDaySpecial: (String, DayKind, String?) -> Unit,
     onClearDay: (String) -> Unit,
+    onSwapDays: (String, String) -> Unit,
     onCopyPastDayToCurrentWeek: (DayPlan, String) -> Unit,
     onOpenNewDishForDay: (String) -> Unit,
     onOpenEditDish: (Dish) -> Unit
@@ -111,6 +115,7 @@ fun WeekCalendarScreen(
     var selectedDetailDate by remember { mutableStateOf<MealPlannerLogic.SimpleDate?>(null) }
     var dishPickerForDateId by remember { mutableStateOf<String?>(null) }
     var copyPastDayDialogSource by remember { mutableStateOf<DayPlan?>(null) }
+    var swapSourceDateId by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -226,6 +231,10 @@ fun WeekCalendarScreen(
                     selectedDetailDate = null
                     onClearDay(dateId)
                 },
+                onSwapDay = {
+                    selectedDetailDate = null
+                    swapSourceDateId = dateId
+                },
                 onMarkSpecial = { kind, note ->
                     selectedDetailDate = null
                     onMarkDaySpecial(dateId, kind, note)
@@ -236,6 +245,20 @@ fun WeekCalendarScreen(
                 }
             )
         }
+    }
+
+    // Dag wisselen: kies met welke andere dag van deze week
+    swapSourceDateId?.let { sourceId ->
+        SwapDayDialog(
+            sourceDateId = sourceId,
+            weekDates = uiState.selectedWeekDates,
+            allDays = uiState.allDays,
+            onDismiss = { swapSourceDateId = null },
+            onSwapWith = { targetId ->
+                swapSourceDateId = null
+                onSwapDays(sourceId, targetId)
+            }
+        )
     }
 
     // Gerecht kiezen uit bibliotheek voor specifieke dag
@@ -389,11 +412,14 @@ private fun DayRowCard(
     val dateFormatted = date.toBelgianString()
     val kind = plan?.dayKind ?: DayKind.LEEG
 
+    // Altijd een egale (ondoorzichtige) kleur: een doorzichtige kaart toont de schaduw eronder
+    // als een lichtere rechthoek. Daarom rekenen we de tint vooraf uit over de achtergrondkleur.
+    val baseSurface = MaterialTheme.colorScheme.surface
     val containerColor = when {
-        isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-        kind == DayKind.KOKEN -> MaterialTheme.colorScheme.surface
-        kind != DayKind.LEEG -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
-        else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+        isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f).compositeOver(baseSurface)
+        kind == DayKind.KOKEN -> baseSurface
+        kind != DayKind.LEEG -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f).compositeOver(baseSurface)
+        else -> baseSurface
     }
 
     val borderColor = if (isToday) {
@@ -415,7 +441,7 @@ private fun DayRowCard(
             .testTag("day_row_${date.toIsoString()}"),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (kind == DayKind.KOKEN) 1.dp else 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
@@ -709,6 +735,72 @@ private fun EmptyDayBottomSheet(
     }
 }
 
+private val SwapGreen = Color(0xFF2E7D32)
+
+private fun dayContentSummary(plan: DayPlan?): String = when {
+    plan == null || plan.dayKind == DayKind.LEEG -> "Leeg"
+    plan.dayKind == DayKind.KOKEN -> plan.dishSnapshot?.name?.ifBlank { null } ?: "Koken"
+    else -> plan.dayKind.labelNl
+}
+
+/** Lijst met de andere dagen van de week; tik op een dag om de inhoud te wisselen. */
+@Composable
+private fun SwapDayDialog(
+    sourceDateId: String,
+    weekDates: List<MealPlannerLogic.SimpleDate>,
+    allDays: Map<String, DayPlan>,
+    onDismiss: () -> Unit,
+    onSwapWith: (String) -> Unit
+) {
+    val source = MealPlannerLogic.parseIsoDate(sourceDateId)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = if (source != null) "${MealPlannerLogic.getDutchDayName(source)} wisselen met…" else "Dag wisselen met…",
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                weekDates.filter { it.toIsoString() != sourceDateId }.forEach { date ->
+                    val id = date.toIsoString()
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onSwapWith(id) }
+                            .testTag("swap_target_$id")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "${MealPlannerLogic.getDutchDayName(date)} ${date.toShortBelgianString()}",
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    text = dayContentSummary(allDays[id]),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                            }
+                            Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = SwapGreen)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuleren") } }
+    )
+}
+
 /**
  * 5.2 Dagdetail Bottom Sheet
  */
@@ -724,6 +816,7 @@ private fun DayDetailBottomSheet(
     onChooseOtherFromLibrary: () -> Unit,
     onPickForMeReplace: () -> Unit,
     onClearDay: () -> Unit,
+    onSwapDay: () -> Unit,
     onMarkSpecial: (DayKind, String?) -> Unit,
     onCopyToCurrentWeek: () -> Unit
 ) {
@@ -945,6 +1038,18 @@ private fun DayDetailBottomSheet(
                     modifier = Modifier.testTag("detail_toggle_special_button")
                 ) {
                     Text("Markeren als Afhaal / Opwarm / Niet koken")
+                }
+
+                if (!isPastWeek) {
+                    TextButton(
+                        onClick = onSwapDay,
+                        colors = ButtonDefaults.textButtonColors(contentColor = SwapGreen),
+                        modifier = Modifier.testTag("detail_swap_day_button")
+                    ) {
+                        Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Dag wisselen")
+                    }
                 }
 
                 TextButton(

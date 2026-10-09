@@ -13,18 +13,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.ShoppingCart
@@ -74,6 +77,7 @@ import com.example.ui.auth.signOut
 import com.example.ui.screens.DishEditorScreen
 import com.example.ui.screens.DishesLibraryScreen
 import com.example.ui.screens.GroceryListScreen
+import com.example.ui.screens.StatsScreen
 import com.example.ui.screens.WeekCalendarScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.MaaltijdViewModel
@@ -115,7 +119,8 @@ enum class MainTab(
 ) {
     WEEK("week", "Week", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
     GERECHTEN("gerechten", "Gerechten", Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
-    BOODSCHAPPEN("boodschappen", "Boodschappen", Icons.Filled.ShoppingCart, Icons.Outlined.ShoppingCart)
+    BOODSCHAPPEN("boodschappen", "Boodschappen", Icons.Filled.ShoppingCart, Icons.Outlined.ShoppingCart),
+    STATISTIEKEN("statistieken", "Statistieken", Icons.Filled.BarChart, Icons.Outlined.BarChart)
 }
 
 @Composable
@@ -220,36 +225,49 @@ fun AuthenticatedAppContent(
             )
         }
         isEditorOpen -> {
-            DishEditorScreen(
-                existingDish = editingDish,
-                dishTypes = uiState.dishTypes,
-                assignToDateIdAfterSave = assignToDateIdOnSave,
-                isSaving = uiState.isSavingDish,
-                onPreviewNormalize = { lines -> viewModel.previewNormalizeIngredients(lines) },
-                onSaveDish = { existingId, name, type, drafts, recipeUrl, note, photo, existingPhotoUrl, assignDateId ->
-                    viewModel.saveDishWithNormalization(
-                        existingDishId = existingId,
-                        name = name,
-                        type = type,
-                        draftIngredients = drafts,
-                        recipeUrl = recipeUrl,
-                        note = note,
-                        processedPhoto = photo,
-                        existingPhotoUrl = existingPhotoUrl,
-                        assignToDateIdAfterSave = assignDateId,
-                        onSavedSuccess = {
-                            isEditorOpen = false
-                            editingDish = null
-                            assignToDateIdOnSave = null
-                        }
-                    )
-                },
-                onCancel = {
-                    isEditorOpen = false
-                    editingDish = null
-                    assignToDateIdOnSave = null
-                }
-            )
+            // De editor staat buiten de hoofd-Scaffold, dus had hij geen SnackbarHost: foutmeldingen bij
+            // opslaan (bv. PERMISSION_DENIED) werden getoond aan niemand. Deze Box legt er één overheen.
+            Box(modifier = Modifier.fillMaxSize()) {
+                DishEditorScreen(
+                    existingDish = editingDish,
+                    dishTypes = uiState.dishTypes,
+                    assignToDateIdAfterSave = assignToDateIdOnSave,
+                    isSaving = uiState.isSavingDish,
+                    onPreviewNormalize = { lines -> viewModel.previewNormalizeIngredients(lines) },
+                    onImportRecipe = { url -> viewModel.importRecipeFromUrl(url) },
+                    onSaveDish = { existingId, name, type, drafts, recipeUrl, note, photo, existingPhotoUrl, assignDateId, prepMinutes ->
+                        viewModel.saveDishWithNormalization(
+                            existingDishId = existingId,
+                            name = name,
+                            type = type,
+                            draftIngredients = drafts,
+                            recipeUrl = recipeUrl,
+                            note = note,
+                            processedPhoto = photo,
+                            existingPhotoUrl = existingPhotoUrl,
+                            assignToDateIdAfterSave = assignDateId,
+                            prepMinutes = prepMinutes,
+                            onSavedSuccess = {
+                                isEditorOpen = false
+                                editingDish = null
+                                assignToDateIdOnSave = null
+                            }
+                        )
+                    },
+                    onCancel = {
+                        isEditorOpen = false
+                        editingDish = null
+                        assignToDateIdOnSave = null
+                    }
+                )
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 88.dp)
+                )
+            }
         }
         else -> {
             val household = uiState.household!!
@@ -429,6 +447,7 @@ fun AuthenticatedAppContent(
                                 onClearDay = { dateId ->
                                     viewModel.clearDay(dateId)
                                 },
+                                onSwapDays = { dateA, dateB -> viewModel.swapDays(dateA, dateB) },
                                 onCopyPastDayToCurrentWeek = { sourcePlan, targetDateId ->
                                     viewModel.copyPastDayToCurrentWeekDay(sourcePlan, targetDateId)
                                 },
@@ -460,6 +479,7 @@ fun AuthenticatedAppContent(
                                 onDeleteDish = { dish ->
                                     viewModel.deleteDish(dish)
                                 },
+                                onRateDish = { dish, rating -> viewModel.setDishRating(dish, rating) },
                                 onAddType = { newType -> viewModel.addDishType(newType) },
                                 onRenameType = { oldType, newType -> viewModel.renameDishType(oldType, newType) },
                                 onDeleteType = { typeToRemove -> viewModel.deleteDishType(typeToRemove) }
@@ -487,6 +507,9 @@ fun AuthenticatedAppContent(
                                     viewModel.finishShopping()
                                 }
                             )
+                        }
+                        MainTab.STATISTIEKEN -> {
+                            StatsScreen(uiState = uiState)
                         }
                     }
                 }

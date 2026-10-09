@@ -14,6 +14,8 @@ import com.example.data.model.IngredientItem
 import com.example.data.model.LooseItem
 import com.example.data.model.WeekChecklist
 import com.example.data.repository.MaaltijdRepository
+import com.example.data.web.RecipeFetcher
+import com.example.domain.ImportedRecipe
 import com.example.domain.MealPlannerLogic
 import com.example.util.PhotoUtils
 import kotlinx.coroutines.Job
@@ -389,6 +391,16 @@ class MaaltijdViewModel(
         }
     }
 
+    fun swapDays(dateIdA: String, dateIdB: String) {
+        if (dateIdA == dateIdB) return
+        val state = _uiState.value
+        val hid = state.household?.id ?: return
+        viewModelScope.launch {
+            repository.swapDays(hid, dateIdA, state.allDays[dateIdA], dateIdB, state.allDays[dateIdB])
+                .onFailure { e -> showSnackbar(e.localizedMessage ?: "Fout bij wisselen van dagen.") }
+        }
+    }
+
     fun clearDay(dateId: String) {
         val hid = _uiState.value.household?.id ?: return
         viewModelScope.launch {
@@ -448,10 +460,16 @@ class MaaltijdViewModel(
         processedPhoto: PhotoUtils.ProcessedPhoto?,
         existingPhotoUrl: String?,
         assignToDateIdAfterSave: String? = null,
+        prepMinutes: Int? = null,
         onSavedSuccess: () -> Unit
     ) {
         val state = _uiState.value
-        val hid = state.household?.id ?: return
+        val hid = state.household?.id ?: run {
+            // Zonder huishouden is er geen pad om naar te schrijven. Vroeger keerde de functie hier stil terug,
+            // waardoor Opslaan leek te "doen niets". Nu krijgt de gebruiker een duidelijke melding.
+            showSnackbar("Opslaan mislukt: er is nog geen huishouden geladen. Probeer het zo opnieuw.")
+            return
+        }
         if (name.isBlank() || type.isBlank()) {
             showSnackbar("Naam en type zijn verplicht.")
             return
@@ -515,7 +533,8 @@ class MaaltijdViewModel(
                     note = note,
                     photoUrl = finalPhotoUrl,
                     needsNormalization = needsNorm,
-                    pendingPhotoUpload = pendingPhoto
+                    pendingPhotoUpload = pendingPhoto,
+                    prepMinutes = prepMinutes
                 )
 
                 saveRes.onSuccess { savedDish ->
@@ -551,6 +570,27 @@ class MaaltijdViewModel(
             rawLines = rawLines,
             isOnline = _uiState.value.isOnline
         )
+    }
+
+    /** Haalt ingrediënten, naam en tijd uit een receptlink. Bij een fout krijgt de gebruiker een melding. */
+    suspend fun importRecipeFromUrl(url: String): ImportedRecipe? {
+        return try {
+            RecipeFetcher.fetch(url)
+        } catch (e: RecipeFetcher.ImportException) {
+            showSnackbar(e.message ?: "Importeren mislukt.")
+            null
+        } catch (e: Exception) {
+            showSnackbar("Importeren mislukt.")
+            null
+        }
+    }
+
+    fun setDishRating(dish: Dish, rating: Int) {
+        val hid = _uiState.value.household?.id ?: return
+        viewModelScope.launch {
+            repository.setDishRating(hid, dish.id, rating)
+                .onFailure { showSnackbar(it.localizedMessage ?: "Waardering opslaan mislukt.") }
+        }
     }
 
     fun deleteDish(dish: Dish) {
