@@ -395,7 +395,7 @@ private fun AggregatedGroceryRow(
             Spacer(modifier = Modifier.width(6.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.name,
+                    text = item.name.replaceFirstChar { it.uppercase() },
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontWeight = if (item.checked) FontWeight.Normal else FontWeight.SemiBold,
                         textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None
@@ -477,7 +477,7 @@ private fun LooseItemRow(
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = item.name,
+                        text = item.name.replaceFirstChar { it.uppercase() },
                         style = MaterialTheme.typography.bodyLarge.copy(
                             fontWeight = if (item.checked) FontWeight.Normal else FontWeight.Medium,
                             textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None
