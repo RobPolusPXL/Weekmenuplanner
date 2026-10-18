@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import com.example.data.model.AggregatedGroceryItem
 import com.example.data.model.DayKind
 import com.example.data.model.LooseItem
+import com.example.domain.GroceryDepartments
 import com.example.domain.MealPlannerLogic
 import com.example.ui.viewmodel.MaaltijdUiState
 
@@ -63,6 +64,29 @@ import com.example.ui.viewmodel.MaaltijdUiState
  * - Sectie "Losse items": handmatig toevoegen (naam, optioneel hoeveelheid), per item de keuze eenmalig of vast.
  * - Knop "Winkelen afronden": eenmalige afgevinkte losse items worden verwijderd, vaste losse items worden terug onafgevinkt gezet.
  */
+@Composable
+private fun DepartmentHeader(label: String, checked: Int, total: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = "$checked/$total",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
 @Composable
 fun GroceryListScreen(
     uiState: MaaltijdUiState,
@@ -194,16 +218,21 @@ fun GroceryListScreen(
                 }
             }
         } else {
-            items(
-                items = aggregatedItems,
-                key = { "agg_${it.itemKey}" }
-            ) { item ->
-                AggregatedGroceryRow(
-                    item = item,
-                    onToggleChecked = { newChecked ->
-                        onToggleAggregatedItem(item.itemKey, newChecked)
-                    }
-                )
+            GroceryDepartments.group(aggregatedItems) { it.name }.forEach { (dept, deptItems) ->
+                item(key = "agg_head_${dept.name}") {
+                    DepartmentHeader(dept.label, deptItems.count { it.checked }, deptItems.size)
+                }
+                items(
+                    items = deptItems,
+                    key = { "agg_${it.itemKey}" }
+                ) { item ->
+                    AggregatedGroceryRow(
+                        item = item,
+                        onToggleChecked = { newChecked ->
+                            onToggleAggregatedItem(item.itemKey, newChecked)
+                        }
+                    )
+                }
             }
         }
 
@@ -325,15 +354,20 @@ fun GroceryListScreen(
         }
 
         if (uiState.looseItems.isNotEmpty()) {
-            items(
-                items = uiState.looseItems,
-                key = { "loose_${it.id}" }
-            ) { loose ->
-                LooseItemRow(
-                    item = loose,
-                    onToggle = { checked -> onToggleLooseItem(loose.id, checked) },
-                    onDelete = { onDeleteLooseItem(loose.id) }
-                )
+            GroceryDepartments.group(uiState.looseItems) { it.name }.forEach { (dept, deptItems) ->
+                item(key = "loose_head_${dept.name}") {
+                    DepartmentHeader(dept.label, deptItems.count { it.checked }, deptItems.size)
+                }
+                items(
+                    items = deptItems,
+                    key = { "loose_${it.id}" }
+                ) { loose ->
+                    LooseItemRow(
+                        item = loose,
+                        onToggle = { checked -> onToggleLooseItem(loose.id, checked) },
+                        onDelete = { onDeleteLooseItem(loose.id) }
+                    )
+                }
             }
         }
 
