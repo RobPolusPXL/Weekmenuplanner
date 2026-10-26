@@ -1,6 +1,14 @@
 package com.example
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.example.ui.screens.PantryScreen
+import com.example.util.StockNotifier
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -23,11 +31,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Kitchen
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.ShoppingCart
@@ -120,6 +130,7 @@ enum class MainTab(
     WEEK("week", "Week", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
     GERECHTEN("gerechten", "Gerechten", Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
     BOODSCHAPPEN("boodschappen", "Boodschappen", Icons.Filled.ShoppingCart, Icons.Outlined.ShoppingCart),
+    VOORRAAD("voorraad", "Voorraad", Icons.Filled.Kitchen, Icons.Outlined.Kitchen),
     STATISTIEKEN("statistieken", "Statistieken", Icons.Filled.BarChart, Icons.Outlined.BarChart)
 }
 
@@ -183,6 +194,24 @@ fun AuthenticatedAppContent(
     }
 
     var activeTab by remember { mutableStateOf(MainTab.WEEK) }
+
+    // Voorraadmeldingen: toestemming vragen (Android 13+) en bijna-op items melden
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    LaunchedEffect(uiState.pantryItems, uiState.isPantryLoaded) {
+        if (uiState.isPantryLoaded) {
+            StockNotifier.update(context, uiState.pantryItems)
+        }
+    }
     var showHouseholdDialog by remember { mutableStateOf(false) }
 
     // State voor 5.4 Gerecht bewerken / nieuw
@@ -380,11 +409,16 @@ fun AuthenticatedAppContent(
                                 selected = selected,
                                 onClick = { activeTab = tab },
                                 icon = {
-                                    if (tab == MainTab.BOODSCHAPPEN && uncheckedGroceriesCount > 0) {
+                                    val badgeCount = when (tab) {
+                                        MainTab.BOODSCHAPPEN -> uncheckedGroceriesCount
+                                        MainTab.VOORRAAD -> uiState.lowStockItems.size
+                                        else -> 0
+                                    }
+                                    if (badgeCount > 0) {
                                         BadgedBox(
                                             badge = {
                                                 Badge {
-                                                    Text(uncheckedGroceriesCount.toString())
+                                                    Text(badgeCount.toString())
                                                 }
                                             }
                                         ) {
@@ -400,7 +434,7 @@ fun AuthenticatedAppContent(
                                         )
                                     }
                                 },
-                                label = { Text(tab.titleNl) },
+                                label = { Text(tab.titleNl, maxLines = 1, softWrap = false) },
                                 modifier = Modifier.testTag("nav_tab_${tab.route}")
                             )
                         }
@@ -506,6 +540,17 @@ fun AuthenticatedAppContent(
                                 onFinishShopping = {
                                     viewModel.finishShopping()
                                 }
+                            )
+                        }
+                        MainTab.VOORRAAD -> {
+                            PantryScreen(
+                                uiState = uiState,
+                                onAddItem = { text, minText -> viewModel.addPantryItem(text, minText) },
+                                onUpdateItem = { item, addText, exactText, minText ->
+                                    viewModel.updatePantryItem(item, addText, exactText, minText)
+                                },
+                                onDeleteItem = { item -> viewModel.deletePantryItem(item) },
+                                onAddToGroceryList = { item -> viewModel.addLowStockToGroceryList(item) }
                             )
                         }
                         MainTab.STATISTIEKEN -> {

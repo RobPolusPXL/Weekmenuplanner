@@ -12,13 +12,16 @@ import com.example.data.model.Dish
 import com.example.data.model.Household
 import com.example.data.model.IngredientItem
 import com.example.data.model.LooseItem
+import com.example.data.model.PantryItem
 import com.example.data.model.WeekChecklist
 import com.example.data.repository.MaaltijdRepository
 import com.example.data.web.RecipeFetcher
 import com.example.domain.ImportedRecipe
 import com.example.domain.MealPlannerLogic
+import com.example.domain.PantryLogic
 import com.example.util.PhotoUtils
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +39,10 @@ data class MaaltijdUiState(
     val allDays: Map<String, DayPlan> = emptyMap(),
     val allWeeks: Map<String, WeekChecklist> = emptyMap(),
     val looseItems: List<LooseItem> = emptyList(),
+    val pantryItems: List<PantryItem> = emptyList(),
+    val isPantryLoaded: Boolean = false,
+    /** weekStart -> itemKey -> gereserveerd uit voorraad */
+    val stockReservations: Map<String, Map<String, Double>> = emptyMap(),
     val selectedWeekSunday: MealPlannerLogic.SimpleDate = MealPlannerLogic.getSundayOfWeek(),
     val currentWeekSunday: MealPlannerLogic.SimpleDate = MealPlannerLogic.getSundayOfWeek(),
     val isOnline: Boolean = true,
@@ -76,11 +83,37 @@ data class MaaltijdUiState(
     /**
      * 5.6 De lijst wordt automatisch berekend uit alle dagen met kind = 'koken' van die week.
      */
-    val aggregatedGroceryItems: List<AggregatedGroceryItem>
-        get() = MealPlannerLogic.aggregateGroceryList(
-            weekDays = selectedWeekPlans.values,
-            checkedMap = selectedWeekCheckedMap
+    private val groceryStockSplit: PantryLogic.StockSplit
+        get() = PantryLogic.splitGroceryList(
+            items = MealPlannerLogic.aggregateGroceryList(
+                weekDays = selectedWeekPlans.values,
+                checkedMap = selectedWeekCheckedMap
+            ),
+            reserved = stockReservations[selectedWeekStartIso].orEmpty(),
+            pantry = pantryItems
         )
+
+    /** Wat nog gekocht moet worden (voorraad al afgetrokken). */
+    val aggregatedGroceryItems: List<AggregatedGroceryItem>
+        get() = groceryStockSplit.toBuy
+
+    /** Ingrediënten van deze week die volledig uit de voorraad komen. */
+    val stockCoveredGroceryItems: List<AggregatedGroceryItem>
+        get() = groceryStockSplit.fromStock
+
+    val lowStockItems: List<PantryItem>
+        get() = pantryItems.filter { it.isLow }
+
+    /** itemKey -> totaal gereserveerd voor huidige en komende weken. */
+    val reservedStockByKey: Map<String, Double>
+        get() {
+            val current = currentWeekSunday.toIsoString()
+            val totals = mutableMapOf<String, Double>()
+            stockReservations.filterKeys { it >= current }.values.forEach { items ->
+                items.forEach { (k, v) -> totals[k] = (totals[k] ?: 0.0) + v }
+            }
+            return totals
+        }
 
     val pendingNormalizationCount: Int
         get() = dishes.count { dish -> dish.needsNormalization || dish.ingredients.any { it.needsNormalization } }
@@ -100,6 +133,7 @@ class MaaltijdViewModel(
 
     private var householdSubJob: Job? = null
     private var backgroundSyncJob: Job? = null
+    private var stockReconcileJob: Job? = null
 
     init {
         // Observe connectivity
@@ -109,6 +143,7 @@ class MaaltijdViewModel(
                 _uiState.value = _uiState.value.copy(isOnline = online)
                 if (online && wasOffline) {
                     triggerBackgroundNormalizationAndPhotoSync()
+                    scheduleStockReconcile()
                 }
             }
         }
@@ -142,6 +177,24 @@ class MaaltijdViewModel(
     private fun subscribeToHouseholdCollections(hid: String) {
         householdSubJob?.cancel()
         householdSubJob = viewModelScope.launch {
+            launch {
+                combine(
+                    repository.observePantry(hid),
+                    repository.observeStockReservations(hid)
+                ) { pantry, reservations -> pantry to reservations }
+                    .catch { e ->
+                        Log.w(TAG, "Error observing pantry", e)
+                        showSnackbar("Voorraad kon niet laden. Zijn de nieuwe Firestore-regels gepubliceerd?")
+                    }
+                    .collect { (pantry, reservations) ->
+                        _uiState.value = _uiState.value.copy(
+                            pantryItems = pantry,
+                            isPantryLoaded = true,
+                            stockReservations = reservations
+                        )
+                        scheduleStockReconcile()
+                    }
+            }
             combine(
                 repository.observeDishes(hid),
                 repository.observeAllDays(hid),
@@ -163,6 +216,7 @@ class MaaltijdViewModel(
                         allWeeks = weeks,
                         looseItems = looseItems
                     )
+                    scheduleStockReconcile()
                     if (_uiState.value.isOnline &&
                         (dishes.any { it.needsNormalization || it.ingredients.any { ing -> ing.needsNormalization } } ||
                                 dishes.any { it.pendingPhotoUpload })
@@ -715,6 +769,103 @@ class MaaltijdViewModel(
                 .onFailure { e ->
                     showSnackbar(e.localizedMessage ?: "Kon winkelen niet afronden.")
                 }
+        }
+    }
+
+    // --- Voorraad ---
+
+    /**
+     * Herverdeelt de voorraad over geplande maaltijden (huidige + komende weken).
+     * Kleine vertraging zodat snelle wijzigingen samen verwerkt worden; enkel schrijven als er iets verandert.
+     */
+    private fun scheduleStockReconcile() {
+        stockReconcileJob?.cancel()
+        stockReconcileJob = viewModelScope.launch {
+            delay(800)
+            val state = _uiState.value
+            val hid = state.household?.id ?: return@launch
+            if (!state.isPantryLoaded || !state.isOnline) return@launch
+
+            val tracked = state.pantryItems.filter { it.isTracked }
+            val freeStock = tracked.distinctBy { it.key }.associate { it.key to (it.quantity ?: 0.0) }
+            val daysByWeek = PantryLogic.daysByWeek(state.allDays)
+            val activeWeeks = PantryLogic.activeWeeks(
+                currentWeekStart = state.currentWeekSunday.toIsoString(),
+                plannedWeeks = daysByWeek.keys,
+                reservedWeeks = state.stockReservations.keys
+            )
+            if (activeWeeks.isEmpty()) return@launch
+            val needs = activeWeeks.associateWith { w -> PantryLogic.weekNeeds(daysByWeek[w].orEmpty()) }
+            val result = PantryLogic.reconcile(freeStock, state.stockReservations, needs, activeWeeks)
+            if (!PantryLogic.hasChanges(freeStock, state.stockReservations, activeWeeks, result)) return@launch
+
+            repository.reconcileStock(hid, tracked.map { it.id }, needs, activeWeeks)
+                .onFailure { e -> Log.w(TAG, "Voorraad herverdelen mislukt", e) }
+        }
+    }
+
+    /** "1 kg rijst" (+ optioneel minimum). Bestaat het al, dan wordt het aangevuld. */
+    fun addPantryItem(text: String, minText: String) {
+        val state = _uiState.value
+        val hid = state.household?.id ?: return
+        val parsed = PantryLogic.parseInput(text)
+        if (parsed == null) {
+            showSnackbar("Geef een product op, bv. \"1 kg rijst\" of \"zout\".")
+            return
+        }
+        val min = if (minText.isBlank()) null else PantryLogic.parseAmount(minText)
+        val existing = state.pantryItems.firstOrNull { it.name == parsed.name && it.unit == parsed.unit }
+        viewModelScope.launch {
+            repository.addOrRefillPantryItem(hid, existing, parsed.name, parsed.unit, parsed.quantity, min)
+                .onSuccess {
+                    val label = parsed.name.replaceFirstChar { it.uppercase() }
+                    showSnackbar(if (existing != null) "$label aangevuld." else "$label toegevoegd aan voorraad.")
+                }
+                .onFailure { e -> showSnackbar(e.localizedMessage ?: "Kon voorraad niet bijwerken.") }
+        }
+    }
+
+    /**
+     * Aanpassen vanuit het voorraaddialoog.
+     * exactText ingevuld -> hoeveelheid exact zetten; anders addText (mag negatief = verbruikt) optellen.
+     */
+    fun updatePantryItem(item: PantryItem, addText: String, exactText: String, minText: String) {
+        val hid = _uiState.value.household?.id ?: return
+        val exact = if (exactText.isBlank()) null else PantryLogic.parseAmount(exactText)
+        val delta = addText.trim().replace(',', '.').toDoubleOrNull()
+        val newQty: Double? = when {
+            exact != null -> exact
+            delta != null -> maxOf(0.0, (item.quantity ?: 0.0) + delta)
+            else -> item.quantity
+        }
+        val min = if (minText.isBlank()) null else PantryLogic.parseAmount(minText)
+        viewModelScope.launch {
+            repository.updatePantryItem(hid, item.id, newQty, min)
+                .onFailure { e -> showSnackbar(e.localizedMessage ?: "Kon voorraad niet bijwerken.") }
+        }
+    }
+
+    fun deletePantryItem(item: PantryItem) {
+        val hid = _uiState.value.household?.id ?: return
+        viewModelScope.launch {
+            repository.deletePantryItem(hid, item.id)
+                .onFailure { e -> showSnackbar(e.localizedMessage ?: "Kon voorraaditem niet verwijderen.") }
+        }
+    }
+
+    /** Bijna-op item als eenmalig los item op de boodschappenlijst zetten. */
+    fun addLowStockToGroceryList(item: PantryItem) {
+        val state = _uiState.value
+        val hid = state.household?.id ?: return
+        val label = item.name.replaceFirstChar { it.uppercase() }
+        if (state.looseItems.any { it.name.equals(item.name, ignoreCase = true) && !it.checked }) {
+            showSnackbar("$label staat al op de boodschappenlijst.")
+            return
+        }
+        viewModelScope.launch {
+            repository.addLooseItem(hid, label, null, null, false)
+                .onSuccess { showSnackbar("$label op de boodschappenlijst gezet.") }
+                .onFailure { e -> showSnackbar(e.localizedMessage ?: "Kon item niet toevoegen.") }
         }
     }
 
