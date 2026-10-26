@@ -11,7 +11,9 @@ import com.example.data.model.Dish
 import com.example.data.model.Household
 import com.example.data.model.IngredientItem
 import com.example.data.model.LooseItem
+import com.example.data.model.PantryItem
 import com.example.data.model.WeekChecklist
+import com.example.domain.PantryLogic
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -694,6 +696,201 @@ class MaaltijdRepository(
                 }
             }
             batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, path)
+            Result.failure(e)
+        }
+    }
+
+    // --- 6. Voorraad (pantry/{id}) en reserveringen (stockReservations/{weekStart}) ---
+
+    fun observePantry(hid: String): Flow<List<PantryItem>> {
+        val path = "households/$hid/pantry"
+        return db.collection("households").document(hid).collection("pantry")
+            .snapshots()
+            .map { snapshot ->
+                snapshot.documents
+                    .mapNotNull { PantryItem.fromDocument(it) }
+                    .sortedBy { it.name }
+            }
+            .catch { error ->
+                if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                throw error
+            }
+    }
+
+    fun observeStockReservations(hid: String): Flow<Map<String, Map<String, Double>>> {
+        val path = "households/$hid/stockReservations"
+        return db.collection("households").document(hid).collection("stockReservations")
+            .snapshots()
+            .map { snapshot ->
+                snapshot.documents.associate { doc -> doc.id to readReservationItems(doc.get("items")) }
+            }
+            .catch { error ->
+                if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                throw error
+            }
+    }
+
+    private fun readReservationItems(raw: Any?): Map<String, Double> {
+        val map = raw as? Map<*, *> ?: return emptyMap()
+        return map.mapNotNull { (k, v) ->
+            val key = k as? String ?: return@mapNotNull null
+            val value = (v as? Number)?.toDouble() ?: return@mapNotNull null
+            key to value
+        }.toMap()
+    }
+
+    /**
+     * Nieuw voorraaditem, of bestaand item (zelfde naam + eenheid) aanvullen.
+     * quantity == null = basisvoorraad (niet geteld).
+     */
+    suspend fun addOrRefillPantryItem(
+        hid: String,
+        existing: PantryItem?,
+        name: String,
+        unit: String?,
+        quantity: Double?,
+        minQuantity: Double?
+    ): Result<Unit> {
+        val col = db.collection("households").document(hid).collection("pantry")
+        val path = "households/$hid/pantry"
+        return try {
+            val uid = requireUserId()
+            if (existing != null) {
+                val update = mutableMapOf<String, Any?>("updatedAt" to FieldValue.serverTimestamp())
+                if (quantity != null) {
+                    update["quantity"] = PantryLogic.round((existing.quantity ?: 0.0) + quantity)
+                }
+                if (minQuantity != null) update["minQuantity"] = minQuantity
+                col.document(existing.id).update(update).await()
+            } else {
+                val payload = mutableMapOf<String, Any>(
+                    "name" to name,
+                    "createdBy" to uid,
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+                if (unit != null) payload["unit"] = unit
+                if (quantity != null) payload["quantity"] = PantryLogic.round(quantity)
+                if (minQuantity != null) payload["minQuantity"] = minQuantity
+                col.document().set(payload).await()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, path)
+            Result.failure(e)
+        }
+    }
+
+    /** Hoeveelheid en minimum van een voorraaditem instellen (null = niet tellen / geen minimum). */
+    suspend fun updatePantryItem(
+        hid: String,
+        itemId: String,
+        quantity: Double?,
+        minQuantity: Double?
+    ): Result<Unit> {
+        val path = "households/$hid/pantry/$itemId"
+        return try {
+            requireUserId()
+            db.collection("households").document(hid)
+                .collection("pantry").document(itemId)
+                .update(
+                    mapOf(
+                        "quantity" to quantity?.let { PantryLogic.round(it) },
+                        "minQuantity" to minQuantity,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deletePantryItem(hid: String, itemId: String): Result<Unit> {
+        val path = "households/$hid/pantry/$itemId"
+        return try {
+            requireUserId()
+            db.collection("households").document(hid)
+                .collection("pantry").document(itemId)
+                .delete()
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, path)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Verdeelt de voorraad over de geplande maaltijden van de actieve weken.
+     * Draait in een transactie op verse data, zodat twee toestellen tegelijk niets dubbel aftrekken.
+     */
+    suspend fun reconcileStock(
+        hid: String,
+        trackedPantryIds: List<String>,
+        needsPerWeek: Map<String, Map<String, Double>>,
+        activeWeeks: List<String>
+    ): Result<Unit> {
+        val path = "households/$hid/stockReservations"
+        return try {
+            val uid = requireUserId()
+            val hh = db.collection("households").document(hid)
+            val pantryCol = hh.collection("pantry")
+            val resCol = hh.collection("stockReservations")
+            db.runTransaction<Boolean> { tx ->
+                // 1. Lezen (alle reads voor de writes)
+                val pantrySnaps = trackedPantryIds.map { tx.get(pantryCol.document(it)) }
+                val resSnaps = activeWeeks.associateWith { tx.get(resCol.document(it)) }
+
+                val idByKey = linkedMapOf<String, String>()
+                val freeStock = linkedMapOf<String, Double>()
+                for (snap in pantrySnaps) {
+                    val item = PantryItem.fromDocument(snap) ?: continue
+                    val qty = item.quantity ?: continue
+                    if (item.key in idByKey) continue // dubbel item: enkel het eerste telt
+                    idByKey[item.key] = item.id
+                    freeStock[item.key] = qty
+                }
+                val current = resSnaps.mapValues { (_, snap) ->
+                    if (snap.exists()) readReservationItems(snap.get("items")) else emptyMap()
+                }
+
+                val result = PantryLogic.reconcile(freeStock, current, needsPerWeek, activeWeeks)
+                if (!PantryLogic.hasChanges(freeStock, current, activeWeeks, result)) return@runTransaction false
+
+                // 2. Schrijven
+                for ((key, newQty) in result.freeStock) {
+                    val oldQty = freeStock[key] ?: continue
+                    if (kotlin.math.abs(oldQty - newQty) > 0.0001) {
+                        tx.update(
+                            pantryCol.document(idByKey.getValue(key)),
+                            mapOf("quantity" to newQty, "updatedAt" to FieldValue.serverTimestamp())
+                        )
+                    }
+                }
+                for (week in activeWeeks) {
+                    val items = result.reservations[week].orEmpty()
+                    val snap = resSnaps.getValue(week)
+                    if (items.isEmpty()) {
+                        if (snap.exists()) tx.delete(resCol.document(week))
+                    } else if (items != current[week]) {
+                        tx.set(
+                            resCol.document(week),
+                            mapOf(
+                                "items" to items,
+                                "updatedBy" to uid,
+                                "updatedAt" to FieldValue.serverTimestamp()
+                            )
+                        )
+                    }
+                }
+                true
+            }.await()
             Result.success(Unit)
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.WRITE, path)

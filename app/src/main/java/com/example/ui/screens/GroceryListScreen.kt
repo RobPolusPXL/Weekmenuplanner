@@ -105,6 +105,7 @@ fun GroceryListScreen(
     var looseRecurring by remember { mutableStateOf(false) }
 
     val aggregatedItems = uiState.aggregatedGroceryItems
+    val stockCoveredItems = uiState.stockCoveredGroceryItems
     val cookingDaysCount = uiState.selectedWeekPlans.values.count { it.dayKind == DayKind.KOKEN }
 
     LazyColumn(
@@ -206,7 +207,9 @@ fun GroceryListScreen(
                     )
                 ) {
                     Text(
-                        text = if (cookingDaysCount == 0) {
+                        text = if (stockCoveredItems.isNotEmpty()) {
+                            "Alles voor de geplande gerechten zit in de voorraad."
+                        } else if (cookingDaysCount == 0) {
                             "Er zijn nog geen kookdagen gepland in deze week. Plan een gerecht in het tabblad Week om automatisch de boodschappenlijst te vullen."
                         } else {
                             "De geplande gerechten van deze week hebben geen ingrediënten."
@@ -231,6 +234,49 @@ fun GroceryListScreen(
                         onToggleChecked = { newChecked ->
                             onToggleAggregatedItem(item.itemKey, newChecked)
                         }
+                    )
+                }
+            }
+        }
+
+        // 2b. Wat volledig uit de voorraad komt
+        if (stockCoveredItems.isNotEmpty()) {
+            item(key = "stock_head") {
+                Column(modifier = Modifier.padding(top = 6.dp)) {
+                    Text(
+                        text = "Uit voorraad (${stockCoveredItems.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Hoef je niet te kopen, wordt van de voorraad afgetrokken.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            items(
+                items = stockCoveredItems,
+                key = { "stock_${it.itemKey}" }
+            ) { item ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = item.name.replaceFirstChar { it.uppercase() },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = item.fromStockText,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -440,6 +486,13 @@ private fun AggregatedGroceryRow(
                         MaterialTheme.colorScheme.onSurface
                     }
                 )
+                if (item.fromStockText.isNotBlank()) {
+                    Text(
+                        text = "+ ${item.fromStockText} uit voorraad",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
                 if (item.dishNames.isNotEmpty()) {
                     Text(
                         text = item.dishNames.joinToString(", "),

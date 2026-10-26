@@ -321,8 +321,54 @@ data class AggregatedGroceryItem(
     val canonicalUnit: String?,
     val displayAmount: String,
     val checked: Boolean,
-    val dishNames: List<String>
+    val dishNames: List<String>,
+    /** Deel dat uit de voorraad komt (weergavetekst), leeg als niets. */
+    val fromStockText: String = ""
 )
+
+/**
+ * Voorraaditem (households/{hid}/pantry/{id}).
+ * quantity = vrije voorraad (wat nog niet voor geplande maaltijden is gereserveerd).
+ * quantity == null betekent basisvoorraad (bv. zout): telt altijd als in huis, wordt niet geteld.
+ */
+data class PantryItem(
+    val id: String = "",
+    val name: String = "",
+    val unit: String? = null,
+    val quantity: Double? = null,
+    val minQuantity: Double? = null,
+    val createdBy: String = "",
+    val createdAt: Timestamp? = null,
+    val updatedAt: Timestamp? = null
+) {
+    val key: String get() = "$name|${unit ?: ""}"
+    val isTracked: Boolean get() = quantity != null
+
+    /** Op of onder het minimum (of helemaal op als er geen minimum is). */
+    val isLow: Boolean
+        get() {
+            val q = quantity ?: return false
+            return q <= 0.0001 || (minQuantity != null && q <= minQuantity + 0.0001)
+        }
+
+    companion object {
+        fun fromDocument(doc: DocumentSnapshot): PantryItem? {
+            if (!doc.exists()) return null
+            val data = doc.data ?: return null
+            val name = (data["name"] as? String)?.takeIf { it.isNotBlank() } ?: return null
+            return PantryItem(
+                id = doc.id,
+                name = name,
+                unit = (data["unit"] as? String)?.takeIf { it.isNotBlank() },
+                quantity = (data["quantity"] as? Number)?.toDouble(),
+                minQuantity = (data["minQuantity"] as? Number)?.toDouble(),
+                createdBy = (data["createdBy"] as? String) ?: "",
+                createdAt = doc.getTimestamp("createdAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE),
+                updatedAt = doc.getTimestamp("updatedAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+            )
+        }
+    }
+}
 
 sealed interface UiState<out T> {
     data object Loading : UiState<Nothing>
