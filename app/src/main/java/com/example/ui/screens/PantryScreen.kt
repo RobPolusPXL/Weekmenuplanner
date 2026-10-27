@@ -163,7 +163,7 @@ fun PantryScreen(
                         OutlinedTextField(
                             value = newMin,
                             onValueChange = { newMin = it },
-                            label = { Text("Melding onder (optioneel)") },
+                            label = { Text("Minimumvoorraad (optioneel)") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier
@@ -186,7 +186,7 @@ fun PantryScreen(
                         }
                     }
                     Text(
-                        text = "Bestaat het product al, dan wordt het aangevuld. Melding in de basiseenheid (g, ml, stuk).",
+                        text = "Bestaat het product al, dan wordt het aangevuld. Minimum in g, ml of stuk. Daaronder krijg je een melding.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -272,7 +272,7 @@ private fun PantryRow(item: PantryItem, reserved: Double, onClick: () -> Unit) {
                 )
                 val sub = buildList {
                     if (reserved > 0.0001) add("${PantryLogic.format(reserved, item.unit)} gepland")
-                    item.minQuantity?.let { add("melding onder ${PantryLogic.format(it, item.unit)}") }
+                    item.minQuantity?.let { add("min. ${PantryLogic.format(it, item.unit)}") }
                 }
                 if (sub.isNotEmpty()) {
                     Text(
@@ -370,8 +370,8 @@ private fun PantryEditDialog(
                 OutlinedTextField(
                     value = minText,
                     onValueChange = { minText = it },
-                    label = { Text("Melding onder$unitLabel") },
-                    supportingText = { Text("Leeg = enkel melding als het op is") },
+                    label = { Text("Minimumvoorraad$unitLabel") },
+                    supportingText = { Text("Melding als het minder wordt. Leeg = pas als het op is.") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier
