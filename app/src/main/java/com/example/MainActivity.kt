@@ -67,11 +67,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -133,28 +133,6 @@ enum class MainTab(
     BOODSCHAPPEN("boodschappen", "Boodschappen", Icons.Filled.ShoppingCart, Icons.Outlined.ShoppingCart),
     VOORRAAD("voorraad", "Voorraad", Icons.Filled.Kitchen, Icons.Outlined.Kitchen),
     STATISTIEKEN("statistieken", "Statistieken", Icons.Filled.BarChart, Icons.Outlined.BarChart)
-}
-
-/** Tablabel dat kleiner wordt tot het volledig past, in plaats van afgeknipt te worden. */
-@Composable
-private fun FittingNavLabel(text: String) {
-    val baseStyle = MaterialTheme.typography.labelMedium
-    var style by remember(text, baseStyle) { mutableStateOf(baseStyle) }
-    var ready by remember(text, baseStyle) { mutableStateOf(false) }
-    Text(
-        text = text,
-        style = style,
-        maxLines = 1,
-        softWrap = false,
-        modifier = Modifier.drawWithContent { if (ready) drawContent() },
-        onTextLayout = { result ->
-            if (result.didOverflowWidth && style.fontSize.value > 8f) {
-                style = style.copy(fontSize = style.fontSize * 0.92f)
-            } else {
-                ready = true
-            }
-        }
-    )
 }
 
 @Composable
@@ -457,7 +435,22 @@ fun AuthenticatedAppContent(
                                         )
                                     }
                                 },
-                                label = { FittingNavLabel(tab.titleNl) },
+                                label = {
+                                    if (tab == MainTab.BOODSCHAPPEN) {
+                                        // Langste label: kleiner zodat het volledig past
+                                        Text(
+                                            text = tab.titleNl,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontSize = 10.sp,
+                                                letterSpacing = 0.sp
+                                            ),
+                                            maxLines = 1,
+                                            softWrap = false
+                                        )
+                                    } else {
+                                        Text(tab.titleNl, maxLines = 1, softWrap = false)
+                                    }
+                                },
                                 modifier = Modifier.testTag("nav_tab_${tab.route}")
                             )
                         }
