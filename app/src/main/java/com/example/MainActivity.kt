@@ -70,6 +70,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
@@ -403,6 +406,31 @@ fun AuthenticatedAppContent(
                     )
                 },
                 bottomBar = {
+                  BoxWithConstraints {
+                    // Eén lettergrootte voor alle labels: zo groot mogelijk (max 12sp),
+                    // maar klein genoeg dat het langste label volledig past op dit toestel.
+                    val textMeasurer = rememberTextMeasurer()
+                    val density = LocalDensity.current
+                    val baseLabelStyle = MaterialTheme.typography.labelMedium
+                    val barWidth = maxWidth
+                    val navLabelStyle = remember(barWidth, baseLabelStyle, density) {
+                        val available = with(density) {
+                            (barWidth / MainTab.entries.size - 16.dp).toPx()
+                        }
+                        val widest = MainTab.entries.maxOf { tab ->
+                            textMeasurer.measure(
+                                text = tab.titleNl,
+                                style = baseLabelStyle,
+                                maxLines = 1,
+                                softWrap = false
+                            ).size.width
+                        }.toFloat()
+                        val factor = if (widest > available) available / widest * 0.97f else 1f
+                        baseLabelStyle.copy(
+                            fontSize = baseLabelStyle.fontSize * factor,
+                            lineHeight = baseLabelStyle.lineHeight * factor
+                        )
+                    }
                     NavigationBar {
                         MainTab.entries.forEach { tab ->
                             val selected = activeTab == tab
@@ -435,26 +463,12 @@ fun AuthenticatedAppContent(
                                         )
                                     }
                                 },
-                                label = {
-                                    if (tab == MainTab.BOODSCHAPPEN) {
-                                        // Langste label: kleiner zodat het volledig past
-                                        Text(
-                                            text = tab.titleNl,
-                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                fontSize = 10.sp,
-                                                letterSpacing = 0.sp
-                                            ),
-                                            maxLines = 1,
-                                            softWrap = false
-                                        )
-                                    } else {
-                                        Text(tab.titleNl, maxLines = 1, softWrap = false)
-                                    }
-                                },
+                                label = { Text(tab.titleNl, style = navLabelStyle, maxLines = 1, softWrap = false) },
                                 modifier = Modifier.testTag("nav_tab_${tab.route}")
                             )
                         }
                     }
+                  }
                 }
             ) { innerPadding ->
                 Box(
