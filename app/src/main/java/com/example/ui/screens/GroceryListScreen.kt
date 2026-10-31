@@ -158,7 +158,7 @@ fun GroceryListScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = MealPlannerLogic.formatWeekHeader(uiState.selectedWeekSunday),
+                            text = MealPlannerLogic.formatWeekHeader(uiState.selectedWeekStart),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                         )
                     }

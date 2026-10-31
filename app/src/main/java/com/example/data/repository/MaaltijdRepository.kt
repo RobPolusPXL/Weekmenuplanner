@@ -120,6 +120,27 @@ class MaaltijdRepository(
         }
     }
 
+    /** Eerste dag van de week voor het hele huishouden (Calendar-waarde 1..7). */
+    suspend fun updateWeekStartDay(hid: String, day: Int): Result<Unit> {
+        val path = "households/$hid"
+        return try {
+            requireUserId()
+            require(day in 1..7) { "Ongeldige dag." }
+            db.collection("households").document(hid)
+                .update(
+                    mapOf(
+                        "weekStartDay" to day,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
     suspend fun updateHouseholdTypes(
         hid: String,
         newTypes: List<String>,
