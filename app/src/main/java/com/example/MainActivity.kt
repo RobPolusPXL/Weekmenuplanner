@@ -601,7 +601,8 @@ fun AuthenticatedAppContent(
                             onSignOutComplete = {},
                             scope = scope
                         )
-                    }
+                    },
+                    onWeekStartDayChange = { day -> viewModel.setWeekStartDay(day) }
                 )
             }
         }

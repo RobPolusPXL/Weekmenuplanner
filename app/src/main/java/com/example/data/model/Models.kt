@@ -17,11 +17,16 @@ val DEFAULT_DISH_TYPES = listOf(
     "brood/snel"
 )
 
+/** Standaard eerste dag van de week: zondag (java.util.Calendar.SUNDAY). */
+const val DEFAULT_WEEK_START_DAY = 1
+
 data class Household(
     val id: String = "",
     val members: List<String> = emptyList(),
     val inviteCode: String = "",
     val types: List<String> = DEFAULT_DISH_TYPES,
+    /** Eerste dag van de week, Calendar-waarde: 1 = zondag, 2 = maandag … 7 = zaterdag. */
+    val weekStartDay: Int = DEFAULT_WEEK_START_DAY,
     val createdBy: String = "",
     val createdAt: Timestamp? = null,
     val updatedAt: Timestamp? = null
@@ -35,6 +40,8 @@ data class Household(
                 ?: DEFAULT_DISH_TYPES
             val inviteCode = (data["inviteCode"] as? String) ?: doc.id
             val createdBy = (data["createdBy"] as? String) ?: ""
+            val weekStartDay = (data["weekStartDay"] as? Number)?.toInt()?.takeIf { it in 1..7 }
+                ?: DEFAULT_WEEK_START_DAY
             val createdAt = doc.getTimestamp("createdAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
             val updatedAt = doc.getTimestamp("updatedAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
             return Household(
@@ -42,6 +49,7 @@ data class Household(
                 members = members,
                 inviteCode = inviteCode,
                 types = types,
+                weekStartDay = weekStartDay,
                 createdBy = createdBy,
                 createdAt = createdAt,
                 updatedAt = updatedAt

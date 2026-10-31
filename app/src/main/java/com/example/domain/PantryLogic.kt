@@ -25,12 +25,12 @@ object PantryLogic {
             .mapNotNull { item -> item.totalQuantity?.let { item.itemKey to it } }
             .toMap()
 
-    /** Groepeert dagen per weekstart (zondag, ISO-datum). */
-    fun daysByWeek(allDays: Map<String, DayPlan>): Map<String, List<DayPlan>> =
+    /** Groepeert dagen per weekstart (ISO-datum van de eerste dag van de week). */
+    fun daysByWeek(allDays: Map<String, DayPlan>, firstDayOfWeek: Int = 1): Map<String, List<DayPlan>> =
         allDays.values
             .groupBy { day ->
                 MealPlannerLogic.parseIsoDate(day.dateId)
-                    ?.let { MealPlannerLogic.getSundayOfWeek(it).toIsoString() } ?: ""
+                    ?.let { MealPlannerLogic.getWeekStart(it, firstDayOfWeek).toIsoString() } ?: ""
             }
             .filterKeys { it.isNotEmpty() }
 

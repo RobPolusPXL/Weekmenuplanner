@@ -32,7 +32,8 @@ service cloud.firestore {
 
     function isValidHousehold(data) {
       return data.keys().hasAll(['members', 'inviteCode', 'types', 'createdBy', 'createdAt', 'updatedAt']) &&
-             data.keys().hasOnly(['members', 'inviteCode', 'types', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['members', 'inviteCode', 'types', 'weekStartDay', 'createdBy', 'createdAt', 'updatedAt']) &&
+             (!('weekStartDay' in data) || (data.weekStartDay is int && data.weekStartDay >= 1 && data.weekStartDay <= 7)) &&
              data.members is list &&
              data.members.size() >= 1 &&
              data.members.size() <= 2 &&
@@ -183,10 +184,10 @@ service cloud.firestore {
                        incoming().inviteCode == existing().inviteCode &&
                        incoming().createdBy == existing().createdBy &&
                        incoming().createdAt == existing().createdAt && (
-                         // Action 1: Member updates types
+                         // Action 1: Member updates types / eerste dag van de week
                          (request.auth.uid in existing().members &&
                           incoming().members == existing().members &&
-                          incoming().diff(existing()).affectedKeys().hasOnly(['types', 'updatedAt'])) ||
+                          incoming().diff(existing()).affectedKeys().hasOnly(['types', 'weekStartDay', 'updatedAt'])) ||
                          // Action 2: Second user joins household via inviteCode
                          (!(request.auth.uid in existing().members) &&
                           existing().members.size() == 1 &&

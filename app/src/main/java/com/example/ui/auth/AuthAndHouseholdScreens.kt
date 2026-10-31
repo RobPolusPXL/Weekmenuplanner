@@ -9,6 +9,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import com.example.domain.MealPlannerLogic
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -566,7 +570,8 @@ fun HouseholdInfoDialog(
     household: Household,
     userEmail: String?,
     onDismiss: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onWeekStartDayChange: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
     var copied by remember { mutableStateOf(false) }
@@ -656,6 +661,12 @@ fun HouseholdInfoDialog(
                     )
                 }
 
+                HorizontalDivider()
+                WeekStartDayPicker(
+                    selectedDay = household.weekStartDay,
+                    onSelect = onWeekStartDayChange
+                )
+
                 if (!userEmail.isNullOrBlank()) {
                     HorizontalDivider()
                     Text(
@@ -692,4 +703,36 @@ fun HouseholdInfoDialog(
             }
         }
     )
+}
+
+
+/** Keuze "Week begint op": geldt voor het hele huishouden. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WeekStartDayPicker(selectedDay: Int, onSelect: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "Week begint op",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            MealPlannerLogic.WEEK_START_OPTIONS.forEach { (day, name) ->
+                FilterChip(
+                    selected = day == selectedDay,
+                    onClick = { onSelect(day) },
+                    label = { Text(name.take(2)) },
+                    modifier = Modifier.testTag("week_start_chip_$day")
+                )
+            }
+        }
+        Text(
+            text = "Geldt voor jullie allebei.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }

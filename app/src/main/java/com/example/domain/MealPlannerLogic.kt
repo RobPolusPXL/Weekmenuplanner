@@ -15,7 +15,7 @@ import kotlin.random.Random
 
 /**
  * Pure domain logic for Maaltijdplanner:
- * - Belgian date formatting (dd/MM/yyyy) and week calculation (week starts on Sunday)
+ * - Belgian date formatting (dd/MM/yyyy) and week calculation (eerste dag van de week instelbaar, standaard zondag)
  * - 6.2 "Kies voor mij" local random + type rule algorithm
  * - 6.3 "Genereer hele week" local algorithm
  * - 6.5 Boodschappenlijst eenheidomrekening en samentellen
@@ -68,17 +68,32 @@ object MealPlannerLogic {
     }
 
     /**
-     * Week starts on Sunday (Calendar.SUNDAY == 1).
+     * Eerste dag van de week waarin [date] valt.
+     * [firstDayOfWeek] volgt java.util.Calendar: 1 = zondag, 2 = maandag … 7 = zaterdag.
      */
-    fun getSundayOfWeek(date: SimpleDate = today()): SimpleDate {
+    fun getWeekStart(date: SimpleDate = today(), firstDayOfWeek: Int = Calendar.SUNDAY): SimpleDate {
         val cal = date.toCalendar()
-        val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK) // 1 = Sunday .. 7 = Saturday
-        val daysSinceSunday = dayOfWeek - Calendar.SUNDAY
-        if (daysSinceSunday != 0) {
-            cal.add(Calendar.DAY_OF_MONTH, -daysSinceSunday)
+        val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK) // 1 = zondag .. 7 = zaterdag
+        val daysBack = ((dayOfWeek - firstDayOfWeek) % 7 + 7) % 7
+        if (daysBack != 0) {
+            cal.add(Calendar.DAY_OF_MONTH, -daysBack)
         }
         return cal.toSimpleDate()
     }
+
+    /** Week die op zondag begint (oorspronkelijk gedrag). */
+    fun getSundayOfWeek(date: SimpleDate = today()): SimpleDate = getWeekStart(date, Calendar.SUNDAY)
+
+    /** Keuzes voor "Week begint op", in de volgorde maandag … zondag (Calendar-waarde, naam). */
+    val WEEK_START_OPTIONS: List<Pair<Int, String>> = listOf(
+        Calendar.MONDAY to "Maandag",
+        Calendar.TUESDAY to "Dinsdag",
+        Calendar.WEDNESDAY to "Woensdag",
+        Calendar.THURSDAY to "Donderdag",
+        Calendar.FRIDAY to "Vrijdag",
+        Calendar.SATURDAY to "Zaterdag",
+        Calendar.SUNDAY to "Zondag"
+    )
 
     fun addDays(date: SimpleDate, days: Int): SimpleDate {
         val cal = date.toCalendar()
@@ -86,8 +101,8 @@ object MealPlannerLogic {
         return cal.toSimpleDate()
     }
 
-    fun getWeekDates(sundayStart: SimpleDate): List<SimpleDate> {
-        return (0..6).map { offset -> addDays(sundayStart, offset) }
+    fun getWeekDates(weekStart: SimpleDate): List<SimpleDate> {
+        return (0..6).map { offset -> addDays(weekStart, offset) }
     }
 
     fun getDutchDayName(date: SimpleDate): String {
@@ -108,9 +123,9 @@ object MealPlannerLogic {
         return getDutchDayName(date).take(2)
     }
 
-    fun formatWeekHeader(sundayStart: SimpleDate): String {
-        val saturdayEnd = addDays(sundayStart, 6)
-        return "${sundayStart.toBelgianString()} – ${saturdayEnd.toBelgianString()}"
+    fun formatWeekHeader(weekStart: SimpleDate): String {
+        val weekEnd = addDays(weekStart, 6)
+        return "${weekStart.toBelgianString()} – ${weekEnd.toBelgianString()}"
     }
 
     // --- 6.2 "Kies voor mij" (per dag) ---

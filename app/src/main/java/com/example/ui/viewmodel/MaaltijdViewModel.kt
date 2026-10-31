@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.ai.IngredientNormalizerService
 import com.example.data.model.AggregatedGroceryItem
 import com.example.data.model.DEFAULT_DISH_TYPES
+import com.example.data.model.DEFAULT_WEEK_START_DAY
 import com.example.data.model.DayKind
 import com.example.data.model.DayPlan
 import com.example.data.model.Dish
@@ -43,8 +44,8 @@ data class MaaltijdUiState(
     val isPantryLoaded: Boolean = false,
     /** weekStart -> itemKey -> gereserveerd uit voorraad */
     val stockReservations: Map<String, Map<String, Double>> = emptyMap(),
-    val selectedWeekSunday: MealPlannerLogic.SimpleDate = MealPlannerLogic.getSundayOfWeek(),
-    val currentWeekSunday: MealPlannerLogic.SimpleDate = MealPlannerLogic.getSundayOfWeek(),
+    val selectedWeekStart: MealPlannerLogic.SimpleDate = MealPlannerLogic.getSundayOfWeek(),
+    val currentWeekStartDate: MealPlannerLogic.SimpleDate = MealPlannerLogic.getSundayOfWeek(),
     val isOnline: Boolean = true,
     val isSyncingBackground: Boolean = false,
     val isSavingDish: Boolean = false,
@@ -56,26 +57,30 @@ data class MaaltijdUiState(
     val dishTypes: List<String>
         get() = household?.types?.ifEmpty { DEFAULT_DISH_TYPES } ?: DEFAULT_DISH_TYPES
 
+    /** Eerste dag van de week (Calendar-waarde: 1 = zondag, 2 = maandag …), gedeeld per huishouden. */
+    val weekStartDay: Int
+        get() = household?.weekStartDay ?: DEFAULT_WEEK_START_DAY
+
     val selectedWeekDates: List<MealPlannerLogic.SimpleDate>
-        get() = MealPlannerLogic.getWeekDates(selectedWeekSunday)
+        get() = MealPlannerLogic.getWeekDates(selectedWeekStart)
 
     val selectedWeekDateIds: List<String>
         get() = selectedWeekDates.map { it.toIsoString() }
 
     val currentWeekDates: List<MealPlannerLogic.SimpleDate>
-        get() = MealPlannerLogic.getWeekDates(currentWeekSunday)
+        get() = MealPlannerLogic.getWeekDates(currentWeekStartDate)
 
     val isPastWeekSelected: Boolean
-        get() = selectedWeekSunday < currentWeekSunday
+        get() = selectedWeekStart < currentWeekStartDate
 
     val isCurrentWeekSelected: Boolean
-        get() = selectedWeekSunday == currentWeekSunday
+        get() = selectedWeekStart == currentWeekStartDate
 
     val selectedWeekPlans: Map<String, DayPlan>
         get() = selectedWeekDateIds.mapNotNull { id -> allDays[id]?.let { id to it } }.toMap()
 
     val selectedWeekStartIso: String
-        get() = selectedWeekSunday.toIsoString()
+        get() = selectedWeekStart.toIsoString()
 
     val selectedWeekCheckedMap: Map<String, Boolean>
         get() = allWeeks[selectedWeekStartIso]?.checked ?: emptyMap()
@@ -107,7 +112,7 @@ data class MaaltijdUiState(
     /** itemKey -> totaal gereserveerd voor huidige en komende weken. */
     val reservedStockByKey: Map<String, Double>
         get() {
-            val current = currentWeekSunday.toIsoString()
+            val current = currentWeekStartDate.toIsoString()
             val totals = mutableMapOf<String, Double>()
             stockReservations.filterKeys { it >= current }.values.forEach { items ->
                 items.forEach { (k, v) -> totals[k] = (totals[k] ?: 0.0) + v }
@@ -160,11 +165,15 @@ class MaaltijdViewModel(
                 }
                 .collect { household ->
                     val prevHid = _uiState.value.household?.id
+                    val prevWeekStartDay = _uiState.value.household?.weekStartDay
                     _uiState.value = _uiState.value.copy(
                         isLoadingHousehold = false,
                         household = household,
                         errorBanner = null
                     )
+                    if (household != null && household.weekStartDay != prevWeekStartDay) {
+                        applyWeekStartDay(household.weekStartDay)
+                    }
                     if (household != null && household.id != prevHid) {
                         subscribeToHouseholdCollections(household.id)
                     } else if (household == null) {
@@ -338,25 +347,59 @@ class MaaltijdViewModel(
     // --- Weeknavigatie ---
 
     fun selectPreviousWeek() {
-        val current = _uiState.value.selectedWeekSunday
+        val current = _uiState.value.selectedWeekStart
         _uiState.value = _uiState.value.copy(
-            selectedWeekSunday = MealPlannerLogic.addDays(current, -7)
+            selectedWeekStart = MealPlannerLogic.addDays(current, -7)
         )
     }
 
     fun selectNextWeek() {
-        val current = _uiState.value.selectedWeekSunday
+        val current = _uiState.value.selectedWeekStart
         _uiState.value = _uiState.value.copy(
-            selectedWeekSunday = MealPlannerLogic.addDays(current, 7)
+            selectedWeekStart = MealPlannerLogic.addDays(current, 7)
         )
     }
 
     fun jumpToCurrentWeek() {
-        val nowSunday = MealPlannerLogic.getSundayOfWeek()
+        val nowStart = MealPlannerLogic.getWeekStart(MealPlannerLogic.today(), _uiState.value.weekStartDay)
         _uiState.value = _uiState.value.copy(
-            selectedWeekSunday = nowSunday,
-            currentWeekSunday = nowSunday
+            selectedWeekStart = nowStart,
+            currentWeekStartDate = nowStart
         )
+    }
+
+    /**
+     * Herberekent de getoonde week na een (andere) eerste dag van de week.
+     * Stond de huidige week open, dan blijft die open; anders de week die het meest overlapt.
+     */
+    private fun applyWeekStartDay(day: Int) {
+        val state = _uiState.value
+        val wasCurrent = state.selectedWeekStart == state.currentWeekStartDate
+        val newCurrent = MealPlannerLogic.getWeekStart(MealPlannerLogic.today(), day)
+        val newSelected = if (wasCurrent) {
+            newCurrent
+        } else {
+            MealPlannerLogic.getWeekStart(MealPlannerLogic.addDays(state.selectedWeekStart, 3), day)
+        }
+        _uiState.value = state.copy(
+            selectedWeekStart = newSelected,
+            currentWeekStartDate = newCurrent
+        )
+        scheduleStockReconcile()
+    }
+
+    fun setWeekStartDay(day: Int) {
+        val state = _uiState.value
+        val hid = state.household?.id ?: return
+        if (day == state.weekStartDay) return
+        viewModelScope.launch {
+            repository.updateWeekStartDay(hid, day)
+                .onSuccess {
+                    val name = MealPlannerLogic.WEEK_START_OPTIONS.firstOrNull { it.first == day }?.second ?: ""
+                    showSnackbar("De week begint nu op ${name.lowercase()}.")
+                }
+                .onFailure { e -> showSnackbar(e.localizedMessage ?: "Kon de eerste dag van de week niet opslaan.") }
+        }
     }
 
     // --- 6.2 "Kies voor mij" (per dag) ---
@@ -365,7 +408,10 @@ class MaaltijdViewModel(
         val state = _uiState.value
         val hid = state.household?.id ?: return
         val weekDateIds = MealPlannerLogic.getWeekDates(
-            MealPlannerLogic.getSundayOfWeek(MealPlannerLogic.parseIsoDate(dateId) ?: MealPlannerLogic.today())
+            MealPlannerLogic.getWeekStart(
+                MealPlannerLogic.parseIsoDate(dateId) ?: MealPlannerLogic.today(),
+                state.weekStartDay
+            )
         ).map { it.toIsoString() }
         val weekPlans = weekDateIds.mapNotNull { id -> state.allDays[id]?.let { id to it } }.toMap()
 
@@ -788,9 +834,9 @@ class MaaltijdViewModel(
 
             val tracked = state.pantryItems.filter { it.isTracked }
             val freeStock = tracked.distinctBy { it.key }.associate { it.key to (it.quantity ?: 0.0) }
-            val daysByWeek = PantryLogic.daysByWeek(state.allDays)
+            val daysByWeek = PantryLogic.daysByWeek(state.allDays, state.weekStartDay)
             val activeWeeks = PantryLogic.activeWeeks(
-                currentWeekStart = state.currentWeekSunday.toIsoString(),
+                currentWeekStart = state.currentWeekStartDate.toIsoString(),
                 plannedWeeks = daysByWeek.keys,
                 reservedWeeks = state.stockReservations.keys
             )
