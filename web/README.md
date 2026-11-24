@@ -42,7 +42,16 @@ js/views/                                 week, gerechten, boodschappen, voorraa
 tests/                                    node-tests van de logica
 ```
 
-## Verschillen met de Android-app
+## Extra's ten opzichte van de Android-app
 
-- **Recept importeren** lukt alleen bij sites die het toelaten; de meeste receptsites blokkeren dit in de browser (CORS). Dan plak je de ingrediënten zelf.
-- **Bijna-op-melding**: in de app (rode kaart en badge), nog geen pushmelding op de telefoon.
+- **Kookmodus**: stap voor stap, met per stap de nodige ingrediënten, timers uit de tekst ("10 minuten"), een alarm en een scherm dat aan blijft.
+- **Porties**: een gerecht heeft een aantal personen; per geplande dag kan je kiezen voor hoeveel personen je kookt. De boodschappenlijst en de voorraad rekenen mee.
+- **Recept importeren met AI**: de app maakt een opdracht om in ChatGPT, Claude of Gemini te plakken; het antwoord vult het gerecht in.
+- **Lijst delen**: de boodschappenlijst als tekst delen of kopiëren.
+
+Hiervoor hebben gerechten twee nieuwe velden (`steps`, `servings`) en mag een dagsnapshot `servings` en `portions` bevatten.
+De Firestore-regels in de hoofdmap laten dat toe; publiceer ze opnieuw. De Android-app negeert die velden (ze kookt altijd voor het aantal van het recept).
+
+## Beperkingen
+
+- De bijna-op-melding verschijnt in de app (rode kaart en badge), nog niet als pushmelding op de telefoon.

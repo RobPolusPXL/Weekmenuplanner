@@ -4,9 +4,11 @@ import * as S from '../store.js';
 import { state } from '../store.js';
 import { today, dayName, belgian, shortBelgian, weekDates } from '../logic/dates.js';
 import { DAY_KINDS, kindOf } from '../logic/planner.js';
-import { capitalize, formatQuantity } from '../logic/units.js';
+import { capitalize } from '../logic/units.js';
 import { weekNav, dishMeta } from './common.js';
 import { openDishEditor, openDishPicker } from './dishes.js';
+import { openCookMode } from './cook.js';
+import { portionFactor, scaledAmount, DEFAULT_SERVINGS } from '../logic/cooking.js';
 
 const KIND_ICON = { afhaal: 'bag', opwarm: 'pot', niet_koken: 'moon' };
 
@@ -30,7 +32,8 @@ function dayCard(id, day, isToday, isPast) {
   if (kind === 'koken' && day.dishSnapshot) {
     const snap = day.dishSnapshot;
     const lib = state.dishes.find(d => d.id === day.dishId);
-    body = `<div class="day-dish">${esc(snap.name)}</div>${dishMeta({ ...snap, prepMinutes: lib?.prepMinutes, rating: lib?.rating ?? 0 })}`;
+    body = `<div class="day-dish">${esc(snap.name)}</div>${dishMeta({ ...snap, prepMinutes: lib?.prepMinutes, rating: lib?.rating ?? 0 })}
+      ${snap.portions ? `<div class="day-note">Voor ${snap.portions} ${snap.portions === 1 ? 'persoon' : 'personen'}</div>` : ''}`;
   } else if (kind !== 'leeg' && kind !== 'koken') {
     body = `<div class="day-marker">${icon(KIND_ICON[kind])}<span>${esc(DAY_KINDS[kind])}</span></div>`;
   } else {
@@ -67,6 +70,13 @@ function openDaySheet(dateId) {
     onAction: (a, el) => {
       const day = state.days[dateId];
       if (a === 'pick-for-me') { S.pickForDay(dateId); closeSheet(); }
+      else if (a === 'cook') openCookMode({ dateId });
+      else if (a === 'portions') {
+        const snap = day?.dishSnapshot;
+        const lib = state.dishes.find(d => d.id === day?.dishId);
+        const current = snap?.portions ?? lib?.servings ?? snap?.servings ?? DEFAULT_SERVINGS;
+        S.setPortions(dateId, current + Number(el.dataset.delta));
+      }
       else if (a === 'choose') openDishPicker(dish => { S.assignDish(dateId, dish); closeAllSheets(); });
       else if (a === 'new-dish') openDishEditor(null, { assignToDateId: dateId, onSaved: closeAllSheets });
       else if (a === 'edit-dish') {
@@ -90,9 +100,12 @@ function cookingDay(day, past) {
   const snap = day.dishSnapshot;
   const lib = state.dishes.find(d => d.id === day.dishId);
   const photo = snap.photoUrl || lib?.photoUrl;
+  const servings = lib?.servings ?? snap.servings ?? DEFAULT_SERVINGS;
+  const portions = snap.portions ?? servings;
+  const factor = portionFactor(portions, servings);
   const ingredients = snap.ingredients.length
     ? `<ul class="ing-list">${snap.ingredients.map(i => {
-      const amount = formatQuantity(i.quantity, i.unit);
+      const amount = scaledAmount(i, factor);
       return `<li>${esc(capitalize(i.name || i.raw))}${amount ? `<span class="muted"> · ${esc(amount)}</span>` : ''}</li>`;
     }).join('')}</ul>`
     : '<p class="muted">Geen ingrediënten.</p>';
@@ -101,7 +114,13 @@ function cookingDay(day, past) {
     ${dishMeta({ ...snap, prepMinutes: lib?.prepMinutes, rating: lib?.rating ?? 0 })}
     ${day.note ? `<p class="note-box">${esc(day.note)}</p>` : ''}
     ${snap.note ? `<p class="note-box">${esc(snap.note)}</p>` : ''}
-    <h4 class="section-label">Ingrediënten</h4>${ingredients}
+    <button class="btn primary full cook-btn" data-action="cook">${icon('chef')}Kookmodus${lib?.steps?.length ? ` · ${lib.steps.length} stappen` : ''}</button>
+    <div class="ing-head"><h4 class="section-label">Ingrediënten</h4>
+      <div class="portions"><span>Voor</span>
+        <button class="icon-btn small" data-action="portions" data-delta="-1" aria-label="Minder personen" ${portions <= 1 ? 'disabled' : ''}>${icon('minus')}</button>
+        <strong>${portions}</strong>
+        <button class="icon-btn small" data-action="portions" data-delta="1" aria-label="Meer personen" ${portions >= 12 ? 'disabled' : ''}>${icon('plus')}</button>
+        <span>${portions === 1 ? 'persoon' : 'personen'}</span></div></div>${ingredients}
     ${snap.recipeUrl ? `<a class="btn ghost full" href="${esc(snap.recipeUrl)}" target="_blank" rel="noopener">${icon('link')}Open receptlink</a>` : ''}
     <div class="action-grid">
       ${past ? `<button class="btn primary" data-action="copy">${icon('calendarCopy')}Kopieer naar huidige week</button>` : ''}

@@ -60,7 +60,9 @@ service cloud.firestore {
 
     function isValidDish(data) {
       return data.keys().hasAll(['name', 'type', 'ingredients', 'createdBy', 'createdAt', 'updatedAt']) &&
-             data.keys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'rating', 'prepMinutes', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'rating', 'prepMinutes', 'steps', 'servings', 'createdBy', 'createdAt', 'updatedAt']) &&
+             (!('steps' in data) || data.steps == null || (data.steps is list && data.steps.size() <= 60)) &&
+             (!('servings' in data) || data.servings == null || (data.servings is int && data.servings >= 1 && data.servings <= 20)) &&
              data.name is string &&
              data.name.size() >= 1 &&
              data.name.size() <= 120 &&
@@ -216,7 +218,7 @@ service cloud.firestore {
                          isValidDish(incoming()) &&
                          incoming().createdBy == existing().createdBy &&
                          incoming().createdAt == existing().createdAt &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'rating', 'prepMinutes', 'updatedAt']) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'rating', 'prepMinutes', 'steps', 'servings', 'updatedAt']) &&
                          isHouseholdMember(hid);
 
         allow delete: if isSignedIn() && isValidId(hid) && isValidId(dishId) && isHouseholdMember(hid);

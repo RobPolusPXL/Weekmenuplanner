@@ -32,6 +32,13 @@ const P = {
   bag: '<path d="M5 8h14l-1 12.5a1 1 0 0 1-1 .9H7a1 1 0 0 1-1-.9z"/><path d="M9 10V6.5a3 3 0 0 1 6 0V10"/>',
   moon: '<path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/>',
   calendarCopy: '<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M12 12.5v5M9.5 15h5"/>',
+  play: '<path d="M8 5.5v13l10.5-6.5z"/>',
+  minus: '<path d="M5 12h14"/>',
+  share: '<circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="M8.2 10.8l7.6-4M8.2 13.2l7.6 4"/>',
+  chef: '<path d="M7 14.5a4 4 0 0 1-.6-7.9A5 5 0 0 1 12 3.5a5 5 0 0 1 5.6 3.1A4 4 0 0 1 17 14.5"/><path d="M7 14.5V20h10v-5.5M7 17h10"/>',
+  bell: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2H4.5z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+  timer: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 1.5M9.5 2.5h5"/>',
+  sparkle2: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>',
   tag: '<path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1.5 1.5 0 0 1 0 2.1l-6.1 6.1a1.5 1.5 0 0 1-2.1 0z"/><circle cx="8" cy="8" r="1.3"/>',
 };
 
@@ -91,18 +98,18 @@ function ensureLayer() {
  * Opent een paneel. render() geeft de inhoud (HTML) en wordt opnieuw aangeroepen bij elke wijziging;
  * onAction(action, el, event) handelt klikken op [data-action] af; onSubmit(form, event) voor formulieren.
  */
-export function openSheet({ title, render, onAction, onSubmit, onInput, wide = false }) {
+export function openSheet({ title, render, onAction, onSubmit, onInput, onClose, wide = false, full = false }) {
   ensureLayer();
   const wrap = document.createElement('div');
   wrap.className = 'sheet-wrap';
   wrap.innerHTML = `<div class="sheet-backdrop"></div>
-    <section class="sheet${wide ? ' sheet-wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(typeof title === 'function' ? title() : title)}">
+    <section class="sheet${wide ? ' sheet-wide' : ''}${full ? ' sheet-full' : ''}" role="dialog" aria-modal="true" aria-label="${esc(typeof title === 'function' ? title() : title)}">
       <header class="sheet-head"><h2 class="sheet-title"></h2>
         <button type="button" class="icon-btn" data-close aria-label="Sluiten">${icon('close')}</button></header>
       <div class="sheet-body" data-keep-scroll="sheet"></div>
     </section>`;
   layer.appendChild(wrap);
-  const entry = { wrap, title, render, onAction, onSubmit, onInput };
+  const entry = { wrap, title, render, onAction, onSubmit, onInput, onClose };
   stack.push(entry);
   document.body.classList.add('has-sheet');
 
@@ -134,6 +141,7 @@ export function refreshSheets() {
 export function closeSheet() {
   const entry = stack.pop();
   if (!entry) return;
+  try { entry.onClose?.(); } catch (e) { console.warn(e); }
   entry.wrap.classList.remove('open');
   setTimeout(() => entry.wrap.remove(), 180);
   if (!stack.length) document.body.classList.remove('has-sheet');

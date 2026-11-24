@@ -4,7 +4,9 @@ import * as S from '../store.js';
 import { state } from '../store.js';
 import { parseIngredient } from '../logic/parser.js';
 import { formatQuantity, capitalize } from '../logic/units.js';
-import { importRecipe } from '../logic/recipe.js';
+import { normalizeUrl } from '../logic/recipe.js';
+import { aiPrompt, parseAiRecipe, DEFAULT_SERVINGS } from '../logic/cooking.js';
+import { openCookMode } from './cook.js';
 import { dishMeta, emptyState } from './common.js';
 
 let search = '';
@@ -131,7 +133,8 @@ export function openDishEditor(dish, { assignToDateId = null, onSaved = null } =
     note: dish?.note ?? '',
     photoUrl: dish?.photoUrl ?? '',
     prep: dish?.prepMinutes ? String(dish.prepMinutes) : '',
-    importing: false,
+    servings: String(dish?.servings ?? DEFAULT_SERVINGS),
+    stepsText: (dish?.steps ?? []).join('\n'),
     saving: false,
   };
   const original = new Map((dish?.ingredients ?? []).map(i => [i.raw, i]));
@@ -157,19 +160,24 @@ export function openDishEditor(dish, { assignToDateId = null, onSaved = null } =
             <option value="__new"${f.type === '__new' ? ' selected' : ''}>+ Nieuw type…</option></select></label>
           <label class="field"><span>Bereidingstijd (min)</span><input id="f-prep" name="prep" inputmode="numeric" pattern="[0-9]*" value="${esc(f.prep)}" placeholder="bv. 30"></label>
         </div>
+        <label class="field"><span>Recept voor (personen)</span><input id="f-servings" name="servings" inputmode="numeric" pattern="[0-9]*" value="${esc(f.servings)}"></label>
         ${f.type === '__new' ? `<label class="field"><span>Nieuw type</span><input id="f-newtype" name="newType" maxlength="40" value="${esc(f.newType)}" placeholder="bv. stoofpot"></label>` : ''}
         <label class="field"><span>Ingrediënten <em class="muted">(één per regel, bv. "500 g gehakt")</em></span>
           <textarea id="f-ing" name="ingredients" rows="7">${esc(f.ingredientsText)}</textarea></label>
+        ${dish ? '' : `<button type="button" class="btn ai-btn" data-action="ai-import">${icon('sparkle')}Recept importeren met AI</button>`}
         ${parsed.length ? `<div class="parsed">${parsed.map(i => `<span class="chip">${esc(capitalize(i.name))}${i.quantity != null ? ` · ${esc(formatQuantity(i.quantity, i.unit))}` : ''}</span>`).join('')}</div>` : ''}
         <label class="field"><span>Receptlink</span>
           <div class="input-row"><input id="f-url" name="recipeUrl" type="url" inputmode="url" value="${esc(f.recipeUrl)}" placeholder="https://…">
-          <button type="button" class="btn ghost" data-action="import" ${f.importing ? 'disabled' : ''}>${f.importing ? 'Bezig…' : 'Importeer'}</button></div></label>
+          </div></label>
+        <label class="field"><span>Bereiding <em class="muted">(één stap per regel; tijden zoals "10 minuten" worden timers in de kookmodus)</em></span>
+          <textarea id="f-steps" name="steps" rows="6">${esc(f.stepsText)}</textarea></label>
         <label class="field"><span>Notitie</span><textarea id="f-note" name="note" rows="2" maxlength="2000">${esc(f.note)}</textarea></label>
         <div class="field"><span>Foto</span>
           <div class="photo-row">${f.photoUrl ? `<img class="photo-preview" src="${esc(f.photoUrl)}" alt="">` : ''}
             <label class="btn ghost">${icon('camera')}${f.photoUrl ? 'Andere foto' : 'Foto kiezen'}<input id="f-photo" type="file" accept="image/*" hidden></label>
             ${f.photoUrl ? '<button type="button" class="btn danger-ghost" data-action="remove-photo">Foto weg</button>' : ''}</div></div>
         ${dish ? `<div class="field"><span>Waardering</span>${stars(dish.rating, 'rate-in-editor')}</div>` : ''}
+        ${dish ? `<button type="button" class="btn full" data-action="cook-dish">${icon('chef')}Kookmodus</button>` : ''}
         <div class="row-end sticky-actions">
           ${dish ? `<button type="button" class="btn danger-ghost" data-action="delete">${icon('trash')}Verwijderen</button>` : ''}
           <button type="submit" class="btn primary" ${f.saving ? 'disabled' : ''}>${f.saving ? 'Opslaan…' : 'Opslaan'}</button>
@@ -181,6 +189,8 @@ export function openDishEditor(dish, { assignToDateId = null, onSaved = null } =
       else if (el.id === 'f-type') { f.type = el.value; refreshSheets(); }
       else if (el.id === 'f-newtype') f.newType = el.value;
       else if (el.id === 'f-prep') f.prep = el.value.replace(/\D/g, '');
+      else if (el.id === 'f-servings') f.servings = el.value.replace(/\D/g, '');
+      else if (el.id === 'f-steps') f.stepsText = el.value;
       else if (el.id === 'f-ing') { f.ingredientsText = el.value; refreshSheets(); }
       else if (el.id === 'f-url') f.recipeUrl = el.value;
       else if (el.id === 'f-note') f.note = el.value;
@@ -195,26 +205,31 @@ export function openDishEditor(dish, { assignToDateId = null, onSaved = null } =
         title: 'Gerecht verwijderen', message: `'${dish.name}' verwijderen? Bestaande weekplanningen blijven behouden.`,
         onConfirm: () => { S.deleteDish(dish); closeSheet(); },
       });
-      else if (a === 'import') {
-        f.importing = true; refreshSheets();
-        try {
-          const r = await importRecipe(f.recipeUrl);
-          if (!f.name.trim() && r.name) f.name = r.name;
-          f.ingredientsText = r.ingredientLines.join('\n');
-          if (r.totalMinutes && !f.prep) f.prep = String(r.totalMinutes);
-          f.recipeUrl = r.url;
-          S.toast(`${r.ingredientLines.length} ingrediënten geïmporteerd.`);
-        } catch (e) { S.toast(e.message); }
-        f.importing = false; refreshSheets();
-      }
+      else if (a === 'ai-import') openAiImport(r => {
+        if (r.name) f.name = r.name;
+        if (r.type) {
+          if (S.dishTypes().map(t => t.toLowerCase()).includes(r.type)) f.type = r.type;
+          else { f.type = '__new'; f.newType = r.type; }
+        }
+        if (r.prepMinutes) f.prep = String(r.prepMinutes);
+        if (r.servings) f.servings = String(r.servings);
+        f.ingredientsText = r.ingredients.join('\n');
+        f.stepsText = r.steps.join('\n');
+        if (r.url) f.recipeUrl = r.url;
+        refreshSheets();
+      });
+      else if (a === 'cook-dish' && dish) openCookMode({ dishId: dish.id });
     },
     onSubmit: async () => {
       const type = f.type === '__new' ? f.newType : f.type;
       const prep = f.prep ? Number(f.prep) : null;
+      const servings = f.servings ? Number(f.servings) : null;
+      const steps = f.stepsText.split('\n').map(s => s.trim()).filter(Boolean);
       f.saving = true; refreshSheets();
       const ok = await S.saveDish(dish?.id ?? null, {
         name: f.name, type, ingredients: ingredients(), recipeUrl: f.recipeUrl, note: f.note,
         photoUrl: f.photoUrl, prepMinutes: Number.isInteger(prep) ? prep : null, rating: dish?.rating ?? 0,
+        steps, servings: Number.isInteger(servings) ? servings : null,
       }, assignToDateId);
       f.saving = false;
       if (ok) { closeSheet(); onSaved?.(); } else refreshSheets();
@@ -251,6 +266,46 @@ function openTypesSheet() {
     onSubmit: form => {
       if (form.dataset.form === 'rename') { S.renameType(editing, draft); editing = null; refreshSheets(); }
       else { S.addType(newType); newType = ''; refreshSheets(); }
+    },
+  });
+}
+
+// ---------- Recept importeren via een AI-chat ----------
+
+function openAiImport(onResult) {
+  const st = { source: '', answer: '', error: '', copied: false };
+  openSheet({
+    title: 'Recept importeren met AI',
+    wide: true,
+    render: () => `<ol class="ai-steps">
+      <li><span><strong>Link of recepttekst</strong></span>
+        <textarea id="ai-source" rows="4" placeholder="Plak een link naar een recept, of de tekst van het recept">${esc(st.source)}</textarea></li>
+      <li><span><strong>Kopieer de opdracht</strong> en plak ze in ChatGPT, Claude of Gemini (de gratis versie is genoeg).</span>
+        <button type="button" class="btn${st.copied ? '' : ' primary'}" data-action="copy-prompt">${icon(st.copied ? 'check' : 'copy')}${st.copied ? 'Opdracht gekopieerd' : 'Kopieer opdracht'}</button></li>
+      <li><span><strong>Plak het antwoord</strong> van de AI hieronder.</span>
+        <textarea id="ai-answer" rows="6" placeholder='{ "name": "…", "ingredients": [ … ], "steps": [ … ] }'>${esc(st.answer)}</textarea></li>
+    </ol>
+    ${st.error ? `<p class="error">${esc(st.error)}</p>` : ''}
+    <div class="row-end"><button type="button" class="btn primary" data-action="apply" ${st.answer.trim() ? '' : 'disabled'}>${icon('check')}Controleer en invullen</button></div>`,
+    onInput: el => {
+      if (el.id === 'ai-source') { st.source = el.value; st.copied = false; }
+      else if (el.id === 'ai-answer') { const had = st.answer.trim(); st.answer = el.value; st.error = ''; if (!had !== !el.value.trim()) refreshSheets(); }
+    },
+    onAction: async a => {
+      if (a === 'copy-prompt') {
+        const text = aiPrompt(st.source, S.dishTypes());
+        try { await navigator.clipboard.writeText(text); st.copied = true; }
+        catch { st.error = 'Kopiëren lukte niet. Selecteer de tekst van je recept en probeer opnieuw.'; }
+        refreshSheets();
+      } else if (a === 'apply') {
+        try {
+          const r = parseAiRecipe(st.answer, S.dishTypes());
+          const url = st.source.trim().split(/\s+/).length === 1 ? normalizeUrl(st.source) : null;
+          closeSheet();
+          onResult({ ...r, url });
+          S.toast(`${r.ingredients.length} ingrediënten en ${r.steps.length} stappen ingevuld. Kijk ze na en sla op.`);
+        } catch (e) { st.error = e.message; refreshSheets(); }
+      }
     },
   });
 }

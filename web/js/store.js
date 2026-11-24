@@ -229,11 +229,18 @@ export async function saveDish(existingId, f, assignToDateId = null) {
     if (assignToDateId) {
       await repo.setDayCooking(h, assignToDateId, saved);
     } else if (existingId) {
-      const linked = Object.values(state.days).filter(d => kindOf(d) === 'koken' && d.dishId === saved.id).map(d => d.dateId);
+      const linked = Object.values(state.days).filter(d => kindOf(d) === 'koken' && d.dishId === saved.id);
       await repo.updateLinkedDaySnapshots(h, saved, linked);
     }
     toast(`Gerecht '${saved.name}' opgeslagen.`);
   }, 'Fout bij opslaan van gerecht.');
+}
+export function setPortions(dateId, portions) {
+  const day = state.days[dateId];
+  if (!day?.dishSnapshot) return;
+  const p = Math.min(12, Math.max(1, Math.round(portions)));
+  const dish = state.dishes.find(d => d.id === day.dishId) ?? null;
+  return run(h => repo.setDayPortions(h, day, dish, p), 'Kon aantal personen niet opslaan.');
 }
 export const rateDish = (dish, rating) => run(h => repo.setDishRating(h, dish.id, rating), 'Kon waardering niet opslaan.');
 export const deleteDish = dish => run(async h => {

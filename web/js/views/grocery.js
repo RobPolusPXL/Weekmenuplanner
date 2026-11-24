@@ -5,6 +5,8 @@ import { state } from '../store.js';
 import { groupByDepartment } from '../logic/departments.js';
 import { capitalize, formatQuantity } from '../logic/units.js';
 import { weekNav } from './common.js';
+import { groceryText } from '../logic/cooking.js';
+import { weekHeader } from '../logic/dates.js';
 
 let loose = { name: '', qty: '', unit: '', recurring: false };
 
@@ -35,7 +37,8 @@ export function render() {
 
   return `<div class="view view-grocery">
     <div class="view-head"><div><h1 class="title">Boodschappen</h1>
-      <p class="sub">${cookDays} kookdag${cookDays === 1 ? '' : 'en'} in deze week</p></div></div>
+      <p class="sub">${cookDays} kookdag${cookDays === 1 ? '' : 'en'} in deze week</p></div>
+      <button class="btn" data-action="share">${icon('share')}Lijst delen</button></div>
     ${weekNav()}
     <div class="grocery-cols">
       <div>
@@ -87,8 +90,19 @@ function looseRow(i) {
   </div>`;
 }
 
+async function shareList() {
+  const { toBuy } = S.groceryList();
+  const text = groceryText(toBuy, state.looseItems, weekHeader(state.selectedWeekStart));
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Boodschappen', text }); return; } catch (e) { if (e?.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(text); S.toast('Boodschappenlijst gekopieerd. Plak hem in WhatsApp, Keep of een notitie.'); }
+  catch { S.toast('Delen en kopiëren lukte niet in deze browser.'); }
+}
+
 export function onAction(action, el) {
-  if (action === 'finish') S.finishShopping();
+  if (action === 'share') shareList();
+  else if (action === 'finish') S.finishShopping();
   else if (action === 'delete-loose') S.deleteLoose(el.dataset.id);
 }
 

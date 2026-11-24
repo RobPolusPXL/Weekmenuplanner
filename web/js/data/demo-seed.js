@@ -6,6 +6,22 @@ import { today, weekStart, addDays } from '../logic/dates.js';
 const UID = 'demo-rob';
 const HID = 'DEMO42';
 
+const STEPS = {
+  d1: [
+    'Snipper de ui en pers de look. Breng een grote pot water met zout aan de kook.',
+    'Bak het gehakt rul in een hete pan, 5 minuten. Voeg ui en look toe en bak 2 minuten mee.',
+    'Voeg de tomatenblokjes toe, kruid met peper en zout en laat 15 minuten zachtjes pruttelen.',
+    'Kook ondertussen de spaghetti 9 minuten beetgaar en giet af.',
+    'Meng de spaghetti met de saus en serveer.',
+  ],
+  d3: [
+    'Snijd de kipfilet in blokjes, de ui in ringen en de paprika in reepjes.',
+    'Kook de rijst volgens de verpakking, ongeveer 12 minuten.',
+    'Bak de kip 5 minuten goudbruin. Voeg ui, paprika en currypasta toe en bak 3 minuten.',
+    'Giet de kokosmelk erbij en laat 10 minuten zacht koken. Serveer met de rijst.',
+  ],
+};
+
 const DISHES = [
   ['d1', 'Spaghetti bolognese', 'pasta', 4, 45, ['500 g gehakt', '1 ui', '2 teentjes look', '1 blik tomatenblokjes', '400 g spaghetti', 'snuf zout']],
   ['d2', 'Stoofvlees met frietjes', 'vlees', 5, 180, ['1 kg rundsvlees', '2 uien', '1 fles bruin bier', '2 sneetjes peperkoek', '1 el mosterd', '1 kg aardappelen']],
@@ -31,6 +47,8 @@ export function seedDemo(write) {
     const dish = {
       name, type, rating, prepMinutes,
       ingredients: lines.map(parseIngredient),
+      servings: 2,
+      ...(STEPS[id] ? { steps: STEPS[id] } : {}),
       needsNormalization: false, pendingPhotoUpload: false,
       createdBy: UID, createdAt: now, updatedAt: now,
     };

@@ -1,5 +1,5 @@
 // Weekplanning en boodschappenlijst, gelijk aan MealPlannerLogic in de Android-app.
-import { toCanonical, formatQuantity } from './units.js';
+import { toCanonical, formatQuantity, round3 } from './units.js';
 
 export const DAY_KINDS = {
   leeg: 'Leeg',
@@ -13,8 +13,11 @@ export const DEFAULT_DISH_TYPES = ['pasta', 'rijst', 'aardappelen', 'vlees', 'vi
 
 export const kindOf = day => (day && DAY_KINDS[day.kind] ? day.kind : 'leeg');
 
-/** Snapshot die bij een geplande dag bewaard wordt (zelfde velden als DishSnapshot.toMap()). */
-export function dishSnapshot(dish) {
+/**
+ * Snapshot die bij een geplande dag bewaard wordt (velden van DishSnapshot.toMap() in de Android-app,
+ * aangevuld met servings en, als er voor een ander aantal personen gekookt wordt, portions).
+ */
+export function dishSnapshot(dish, portions = null) {
   const snap = {
     name: dish.name,
     type: dish.type,
@@ -23,7 +26,16 @@ export function dishSnapshot(dish) {
   if (dish.recipeUrl) snap.recipeUrl = dish.recipeUrl;
   if (dish.note) snap.note = dish.note;
   if (dish.photoUrl) snap.photoUrl = dish.photoUrl;
+  if (dish.servings) snap.servings = dish.servings;
+  if (portions && portions !== (dish.servings ?? 2)) snap.portions = portions;
   return snap;
+}
+
+/** Factor waarmee de ingrediënten van een geplande dag vermenigvuldigd worden. */
+export function snapshotFactor(snap) {
+  if (!snap?.portions) return 1;
+  const servings = snap.servings || 2;
+  return snap.portions / servings;
 }
 
 export function ingredientMap(i) {
@@ -112,6 +124,7 @@ export function aggregateGroceryList(weekDays, checkedMap = {}) {
     if (kindOf(day) !== 'koken') continue;
     const snap = day.dishSnapshot;
     if (!snap) continue;
+    const factor = snapshotFactor(snap);
     for (const ing of snap.ingredients || []) {
       const name = (ing.name || '').trim().toLowerCase() || (ing.raw || '').trim().toLowerCase();
       if (!name) continue;
@@ -121,7 +134,7 @@ export function aggregateGroceryList(weekDays, checkedMap = {}) {
         groups.set(itemKey, { name, unit: conv.unit, sum: 0, hasQty: false, dishNames: new Set() });
       }
       const acc = groups.get(itemKey);
-      if (conv.quantity != null) { acc.sum += conv.quantity; acc.hasQty = true; }
+      if (conv.quantity != null) { acc.sum = round3(acc.sum + conv.quantity * factor); acc.hasQty = true; }
       if (snap.name && snap.name.trim()) acc.dishNames.add(snap.name);
     }
   }

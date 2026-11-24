@@ -29,8 +29,15 @@ function readSnapshot(m) {
     type: typeof m.type === 'string' ? m.type : '',
     ingredients: Array.isArray(m.ingredients) ? m.ingredients.filter(x => x && typeof x === 'object').map(readIngredient) : [],
     recipeUrl: str(m.recipeUrl), note: str(m.note), photoUrl: str(m.photoUrl),
+    servings: posInt(m.servings), portions: posInt(m.portions),
   };
 }
+
+function posInt(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 1 ? Math.trunc(v) : null;
+}
+
+const strList = v => (Array.isArray(v) ? v.filter(s => typeof s === 'string' && s.trim()) : []);
 
 export function readHousehold({ id, data }) {
   const types = Array.isArray(data.types) ? data.types.filter(t => typeof t === 'string') : [];
@@ -59,6 +66,8 @@ export function readDish({ id, data }) {
     pendingPhotoUpload: data.pendingPhotoUpload === true,
     rating: Math.min(5, Math.max(0, Math.trunc(num(data.rating) ?? 0))),
     prepMinutes: prep != null && prep > 0 ? Math.trunc(prep) : null,
+    steps: strList(data.steps),
+    servings: posInt(data.servings),
     createdBy: data.createdBy ?? '',
   };
 }
@@ -188,6 +197,8 @@ export function createRepo(db) {
       const photoUrl = f.photoUrl?.trim() || null;
       const prep = Number.isInteger(f.prepMinutes) && f.prepMinutes >= 1 && f.prepMinutes <= 1440 ? f.prepMinutes : null;
       const ingredients = f.ingredients.map(ingredientMap);
+      const steps = (f.steps ?? []).map(s => s.trim()).filter(Boolean).slice(0, 60).map(s => s.slice(0, 1000));
+      const servings = Number.isInteger(f.servings) && f.servings >= 1 && f.servings <= 20 ? f.servings : null;
       const needsNormalization = ingredients.some(i => i.needsNormalization);
       const path = `${H(hid)}/dishes/${id}`;
       if (!existingId) {
@@ -199,23 +210,33 @@ export function createRepo(db) {
         if (note) payload.note = note;
         if (photoUrl) payload.photoUrl = photoUrl;
         if (prep != null) payload.prepMinutes = prep;
+        if (steps.length) payload.steps = steps;
+        if (servings != null) payload.servings = servings;
         await db.set(path, payload);
       } else {
         await db.update(path, {
-          name, type, ingredients, recipeUrl, note, photoUrl, prepMinutes: prep,
+          name, type, ingredients, recipeUrl, note, photoUrl, prepMinutes: prep, steps, servings,
           needsNormalization, pendingPhotoUpload: false, updatedAt: ts(),
         });
       }
-      return { id, name, type, ingredients, recipeUrl, note, photoUrl, prepMinutes: prep, rating: f.rating ?? 0 };
+      return { id, name, type, ingredients, recipeUrl, note, photoUrl, prepMinutes: prep, steps, servings, rating: f.rating ?? 0 };
     },
     /** Na het bewerken: ook de dagen die dit gerecht gepland hebben krijgen de nieuwe snapshot. */
-    async updateLinkedDaySnapshots(hid, dish, dayIds) {
+    async updateLinkedDaySnapshots(hid, dish, days) {
       const uid = requireUid();
-      if (!dayIds.length) return;
-      const snap = dishSnapshot(dish);
-      await db.batch(dayIds.map(id => ({
-        type: 'update', path: `${H(hid)}/days/${id}`, data: { dishSnapshot: snap, updatedBy: uid, updatedAt: ts() },
+      if (!days.length) return;
+      await db.batch(days.map(day => ({
+        type: 'update', path: `${H(hid)}/days/${day.dateId}`,
+        data: { dishSnapshot: dishSnapshot(dish, day.dishSnapshot?.portions ?? null), updatedBy: uid, updatedAt: ts() },
       })));
+    },
+    /** Aantal personen voor één geplande dag; de boodschappenlijst rekent mee. */
+    async setDayPortions(hid, day, dish, portions) {
+      const uid = requireUid();
+      const base = dish ?? { ...day.dishSnapshot };
+      await db.update(`${H(hid)}/days/${day.dateId}`, {
+        dishSnapshot: dishSnapshot(base, portions), updatedBy: uid, updatedAt: ts(),
+      });
     },
     async setDishRating(hid, dishId, rating) {
       requireUid();
@@ -248,8 +269,11 @@ export function createRepo(db) {
       const payload = plan => {
         const p = { kind: plan?.kind ?? 'leeg', updatedBy: uid, updatedAt: ts() };
         if (plan?.dishId) p.dishId = plan.dishId;
-        if (plan?.dishSnapshot) p.dishSnapshot = { ...plan.dishSnapshot, ingredients: plan.dishSnapshot.ingredients.map(ingredientMap) };
-        if (plan?.dishSnapshot) for (const k of ['recipeUrl', 'note', 'photoUrl']) if (!p.dishSnapshot[k]) delete p.dishSnapshot[k];
+        if (plan?.dishSnapshot) {
+          const snap = Object.fromEntries(Object.entries(plan.dishSnapshot).filter(([, v]) => v != null && v !== ''));
+          snap.ingredients = plan.dishSnapshot.ingredients.map(ingredientMap);
+          p.dishSnapshot = snap;
+        }
         if (plan?.note) p.note = plan.note;
         return p;
       };

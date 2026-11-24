@@ -1,15 +1,15 @@
 // Service worker: de app opent ook zonder verbinding en toont updates meteen als er verbinding is.
 // Code: netwerk eerst, offline uit de cache. Lettertypes en iconen: cache eerst.
 // De gegevens zelf cachet Firestore (offline persistence), niet deze service worker.
-const V = 'maaltijdplanner-v1';
+const V = 'maaltijdplanner-v2';
 const CORE = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest',
   'js/main.js', 'js/ui.js', 'js/store.js', 'js/firebase-config.js',
   'js/data/db-firebase.js', 'js/data/db-memory.js', 'js/data/demo-seed.js', 'js/data/repo.js',
   'js/logic/dates.js', 'js/logic/units.js', 'js/logic/parser.js', 'js/logic/planner.js',
-  'js/logic/departments.js', 'js/logic/pantry.js', 'js/logic/stats.js', 'js/logic/recipe.js',
+  'js/logic/departments.js', 'js/logic/pantry.js', 'js/logic/stats.js', 'js/logic/recipe.js', 'js/logic/cooking.js',
   'js/views/common.js', 'js/views/week.js', 'js/views/dishes.js', 'js/views/grocery.js',
-  'js/views/pantry.js', 'js/views/stats.js', 'js/views/account.js',
+  'js/views/pantry.js', 'js/views/stats.js', 'js/views/account.js', 'js/views/cook.js',
   'fonts/PlusJakartaSans.ttf', 'fonts/DMSerifDisplay.ttf',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/favicon-64.png',
 ];
