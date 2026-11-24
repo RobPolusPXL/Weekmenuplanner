@@ -1,0 +1,10 @@
+{
+  "name": "maaltijdplanner-web",
+  "private": true,
+  "type": "module",
+  "description": "Maaltijdplanner als webapp (PWA): weekplanning, gerechten, boodschappen en voorraad voor Rob en Joke",
+  "scripts": {
+    "serve": "python3 -m http.server 8080",
+    "test": "node --test tests/"
+  }
+}
