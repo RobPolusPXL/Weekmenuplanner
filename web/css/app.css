@@ -23,7 +23,7 @@
   --nav-h: 80px;
   color-scheme: light;
 }
-:root.demo .snackbar { background: #15201A; color: #FFFFFF; }
+:root.demo #toast { background: #15201A; color: #FFFFFF; }
 :root.demo {
   /* Alleen in ?demo: wit met groen en zonnebloemgeel */
   --primary: #1E7A4F; --primary-container: #D3F0DF; --on-primary-container: #062B18;
