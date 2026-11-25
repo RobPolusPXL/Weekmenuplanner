@@ -1,6 +1,14 @@
 package com.example
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.example.ui.screens.PantryScreen
+import com.example.util.StockNotifier
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -23,11 +31,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Kitchen
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.ShoppingCart
@@ -60,7 +70,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -120,6 +134,7 @@ enum class MainTab(
     WEEK("week", "Week", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
     GERECHTEN("gerechten", "Gerechten", Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
     BOODSCHAPPEN("boodschappen", "Boodschappen", Icons.Filled.ShoppingCart, Icons.Outlined.ShoppingCart),
+    VOORRAAD("voorraad", "Voorraad", Icons.Filled.Kitchen, Icons.Outlined.Kitchen),
     STATISTIEKEN("statistieken", "Statistieken", Icons.Filled.BarChart, Icons.Outlined.BarChart)
 }
 
@@ -183,6 +198,24 @@ fun AuthenticatedAppContent(
     }
 
     var activeTab by remember { mutableStateOf(MainTab.WEEK) }
+
+    // Voorraadmeldingen: toestemming vragen (Android 13+) en bijna-op items melden
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    LaunchedEffect(uiState.pantryItems, uiState.isPantryLoaded) {
+        if (uiState.isPantryLoaded) {
+            StockNotifier.update(context, uiState.pantryItems)
+        }
+    }
     var showHouseholdDialog by remember { mutableStateOf(false) }
 
     // State voor 5.4 Gerecht bewerken / nieuw
@@ -373,6 +406,31 @@ fun AuthenticatedAppContent(
                     )
                 },
                 bottomBar = {
+                  BoxWithConstraints {
+                    // Eén lettergrootte voor alle labels: zo groot mogelijk (max 12sp),
+                    // maar klein genoeg dat het langste label volledig past op dit toestel.
+                    val textMeasurer = rememberTextMeasurer()
+                    val density = LocalDensity.current
+                    val baseLabelStyle = MaterialTheme.typography.labelMedium
+                    val barWidth = maxWidth
+                    val navLabelStyle = remember(barWidth, baseLabelStyle, density) {
+                        val available = with(density) {
+                            (barWidth / MainTab.entries.size - 16.dp).toPx()
+                        }
+                        val widest = MainTab.entries.maxOf { tab ->
+                            textMeasurer.measure(
+                                text = tab.titleNl,
+                                style = baseLabelStyle,
+                                maxLines = 1,
+                                softWrap = false
+                            ).size.width
+                        }.toFloat()
+                        val factor = if (widest > available) available / widest * 0.97f else 1f
+                        baseLabelStyle.copy(
+                            fontSize = baseLabelStyle.fontSize * factor,
+                            lineHeight = baseLabelStyle.lineHeight * factor
+                        )
+                    }
                     NavigationBar {
                         MainTab.entries.forEach { tab ->
                             val selected = activeTab == tab
@@ -380,11 +438,16 @@ fun AuthenticatedAppContent(
                                 selected = selected,
                                 onClick = { activeTab = tab },
                                 icon = {
-                                    if (tab == MainTab.BOODSCHAPPEN && uncheckedGroceriesCount > 0) {
+                                    val badgeCount = when (tab) {
+                                        MainTab.BOODSCHAPPEN -> uncheckedGroceriesCount
+                                        MainTab.VOORRAAD -> uiState.lowStockItems.size
+                                        else -> 0
+                                    }
+                                    if (badgeCount > 0) {
                                         BadgedBox(
                                             badge = {
                                                 Badge {
-                                                    Text(uncheckedGroceriesCount.toString())
+                                                    Text(badgeCount.toString())
                                                 }
                                             }
                                         ) {
@@ -400,11 +463,12 @@ fun AuthenticatedAppContent(
                                         )
                                     }
                                 },
-                                label = { Text(tab.titleNl) },
+                                label = { Text(tab.titleNl, style = navLabelStyle, maxLines = 1, softWrap = false) },
                                 modifier = Modifier.testTag("nav_tab_${tab.route}")
                             )
                         }
                     }
+                  }
                 }
             ) { innerPadding ->
                 Box(
@@ -508,6 +572,17 @@ fun AuthenticatedAppContent(
                                 }
                             )
                         }
+                        MainTab.VOORRAAD -> {
+                            PantryScreen(
+                                uiState = uiState,
+                                onAddItem = { text, minText -> viewModel.addPantryItem(text, minText) },
+                                onUpdateItem = { item, addText, exactText, minText ->
+                                    viewModel.updatePantryItem(item, addText, exactText, minText)
+                                },
+                                onDeleteItem = { item -> viewModel.deletePantryItem(item) },
+                                onAddToGroceryList = { item -> viewModel.addLowStockToGroceryList(item) }
+                            )
+                        }
                         MainTab.STATISTIEKEN -> {
                             StatsScreen(uiState = uiState)
                         }
@@ -526,7 +601,8 @@ fun AuthenticatedAppContent(
                             onSignOutComplete = {},
                             scope = scope
                         )
-                    }
+                    },
+                    onWeekStartDayChange = { day -> viewModel.setWeekStartDay(day) }
                 )
             }
         }

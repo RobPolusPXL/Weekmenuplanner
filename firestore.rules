@@ -32,7 +32,8 @@ service cloud.firestore {
 
     function isValidHousehold(data) {
       return data.keys().hasAll(['members', 'inviteCode', 'types', 'createdBy', 'createdAt', 'updatedAt']) &&
-             data.keys().hasOnly(['members', 'inviteCode', 'types', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['members', 'inviteCode', 'types', 'weekStartDay', 'createdBy', 'createdAt', 'updatedAt']) &&
+             (!('weekStartDay' in data) || (data.weekStartDay is int && data.weekStartDay >= 1 && data.weekStartDay <= 7)) &&
              data.members is list &&
              data.members.size() >= 1 &&
              data.members.size() <= 2 &&
@@ -59,7 +60,9 @@ service cloud.firestore {
 
     function isValidDish(data) {
       return data.keys().hasAll(['name', 'type', 'ingredients', 'createdBy', 'createdAt', 'updatedAt']) &&
-             data.keys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'rating', 'prepMinutes', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'rating', 'prepMinutes', 'steps', 'servings', 'createdBy', 'createdAt', 'updatedAt']) &&
+             (!('steps' in data) || data.steps == null || (data.steps is list && data.steps.size() <= 60)) &&
+             (!('servings' in data) || data.servings == null || (data.servings is int && data.servings >= 1 && data.servings <= 20)) &&
              data.name is string &&
              data.name.size() >= 1 &&
              data.name.size() <= 120 &&
@@ -131,6 +134,40 @@ service cloud.firestore {
              data.updatedAt <= request.time;
     }
 
+    function isValidAmount(v) {
+      return (v is int || v is float) && v >= 0 && v <= 1000000;
+    }
+
+    function isValidPantryItem(data) {
+      return data.keys().hasAll(['name', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['name', 'unit', 'quantity', 'minQuantity', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 120 &&
+             (!('unit' in data) || data.unit == null || (data.unit is string && data.unit.size() <= 30)) &&
+             (!('quantity' in data) || data.quantity == null || isValidAmount(data.quantity)) &&
+             (!('minQuantity' in data) || data.minQuantity == null || isValidAmount(data.minQuantity)) &&
+             data.createdBy is string &&
+             data.createdBy.size() >= 1 &&
+             data.createdBy.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidStockReservation(data) {
+      return data.keys().hasAll(['items', 'updatedBy', 'updatedAt']) &&
+             data.keys().hasOnly(['items', 'updatedBy', 'updatedAt']) &&
+             data.items is map &&
+             data.items.size() <= 500 &&
+             data.updatedBy is string &&
+             data.updatedBy.size() >= 1 &&
+             data.updatedBy.size() <= 128 &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
     match /households/{hid} {
       allow get: if isSignedIn() && isValidId(hid) && request.auth.uid in existing().members;
       allow list: if isSignedIn() && request.auth.uid in existing().members;
@@ -149,10 +186,10 @@ service cloud.firestore {
                        incoming().inviteCode == existing().inviteCode &&
                        incoming().createdBy == existing().createdBy &&
                        incoming().createdAt == existing().createdAt && (
-                         // Action 1: Member updates types
+                         // Action 1: Member updates types / eerste dag van de week
                          (request.auth.uid in existing().members &&
                           incoming().members == existing().members &&
-                          incoming().diff(existing()).affectedKeys().hasOnly(['types', 'updatedAt'])) ||
+                          incoming().diff(existing()).affectedKeys().hasOnly(['types', 'weekStartDay', 'updatedAt'])) ||
                          // Action 2: Second user joins household via inviteCode
                          (!(request.auth.uid in existing().members) &&
                           existing().members.size() == 1 &&
@@ -181,7 +218,7 @@ service cloud.firestore {
                          isValidDish(incoming()) &&
                          incoming().createdBy == existing().createdBy &&
                          incoming().createdAt == existing().createdAt &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'rating', 'prepMinutes', 'updatedAt']) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'ingredients', 'recipeUrl', 'note', 'photoUrl', 'needsNormalization', 'pendingPhotoUpload', 'rating', 'prepMinutes', 'steps', 'servings', 'updatedAt']) &&
                          isHouseholdMember(hid);
 
         allow delete: if isSignedIn() && isValidId(hid) && isValidId(dishId) && isHouseholdMember(hid);
@@ -252,6 +289,43 @@ service cloud.firestore {
                          isHouseholdMember(hid);
 
         allow delete: if isSignedIn() && isValidId(hid) && isValidId(itemId) && isHouseholdMember(hid);
+      }
+
+      match /pantry/{itemId} {
+        allow get: if isSignedIn() && isValidId(hid) && isValidId(itemId) && isHouseholdMember(hid);
+        allow list: if isSignedIn() && isValidId(hid) && isHouseholdMember(hid);
+
+        allow create: if isSignedIn() &&
+                         isValidId(hid) &&
+                         isValidId(itemId) &&
+                         isValidPantryItem(incoming()) &&
+                         incoming().createdBy == request.auth.uid &&
+                         isHouseholdMember(hid);
+
+        allow update: if isSignedIn() &&
+                         isValidId(hid) &&
+                         isValidId(itemId) &&
+                         isValidPantryItem(incoming()) &&
+                         incoming().createdBy == existing().createdBy &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'unit', 'quantity', 'minQuantity', 'updatedAt']) &&
+                         isHouseholdMember(hid);
+
+        allow delete: if isSignedIn() && isValidId(hid) && isValidId(itemId) && isHouseholdMember(hid);
+      }
+
+      match /stockReservations/{weekStart} {
+        allow get: if isSignedIn() && isValidId(hid) && isValidId(weekStart) && isHouseholdMember(hid);
+        allow list: if isSignedIn() && isValidId(hid) && isHouseholdMember(hid);
+
+        allow create, update: if isSignedIn() &&
+                                 isValidId(hid) &&
+                                 isValidId(weekStart) &&
+                                 isValidStockReservation(incoming()) &&
+                                 incoming().updatedBy == request.auth.uid &&
+                                 isHouseholdMember(hid);
+
+        allow delete: if isSignedIn() && isValidId(hid) && isValidId(weekStart) && isHouseholdMember(hid);
       }
     }
   }
