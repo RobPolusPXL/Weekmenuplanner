@@ -506,7 +506,16 @@ button.list-row:hover { background: var(--surface-2); }
   .days { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
   .dish-grid { grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
   .grocery-cols, .pantry-cols, .stats-cols { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; }
-  .view-week { max-width: 720px; }
+  /* Laptop: weeklijst links, Vanavond rechts naast de lijst (blijft in beeld bij scrollen). */
+  .view-week { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); grid-template-areas: "nav nav" "list tonight" "fill tonight"; align-items: start; column-gap: 24px; }
+  .view-week > .weeknav { grid-area: nav; max-width: 640px; width: 100%; justify-self: center; }
+  .view-week > .week-section { grid-area: list; }
+  .view-week > .tonight { grid-area: tonight; position: sticky; top: 24px; }
+  .view-week > .fill-btn { grid-area: fill; }
+  .view-week > .status-tags { grid-column: 1 / -1; }
+  .view-week:not(:has(.tonight)) { grid-template-columns: minmax(0, 760px); justify-content: center; grid-template-areas: "nav" "list" "fill"; }
+  .view-more { max-width: 820px; margin-inline: auto; }
+  .week-row { min-height: 60px; font-size: 16px; }
   .view-grocery .weeknav, .view-stats .weeknav { max-width: 560px; }
   #toast { bottom: 28px; }
 }
