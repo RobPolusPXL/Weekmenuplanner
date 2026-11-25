@@ -107,6 +107,93 @@ export function reconcile(freeStock, currentReservations, needsPerWeek, weeksIn)
   return { freeStock: newFree, reservations: newRes };
 }
 
+// ---------- Reserveringen per dag ----------
+// Sleutel in stockReservations/{week}.items: "2026-11-25|tomatenpuree|stuk". Oude sleutels zonder datum
+// ("tomatenpuree|stuk") gelden voor de hele week en worden bij de eerste herverdeling omgezet.
+
+const DAY_KEY = /^(\d{4}-\d{2}-\d{2})\|(.*)$/;
+export const dayResKey = (date, key) => `${date}|${key}`;
+export function splitResKey(k) {
+  const m = DAY_KEY.exec(k);
+  return m ? { date: m[1], key: m[2] } : { date: null, key: k };
+}
+
+/**
+ * Verdeelt de voorraad over de dagen vanaf vandaag, vroegste dag eerst.
+ * Reserveringen van voorbije dagen zijn opgegeten: ze blijven staan (voor de boodschappenlijst van die week)
+ * maar komen nooit terug in de vrije voorraad.
+ *  freeStock: { pantryKey: vrije hoeveelheid }
+ *  current:   { week: items } van de huidige en latere weken
+ *  dayNeeds:  { datum: { pantryKey: nodig } } vanaf de start van de huidige week
+ *  weekOf:    datum → weekstart
+ * → { freeStock, reservations: { week: items }, weeks }
+ */
+export function reconcileDaily(freeStock, current, dayNeeds, today, weekOf) {
+  const weeks = new Set(Object.keys(current));
+  for (const d of Object.keys(dayNeeds)) if (d >= today) weeks.add(weekOf(d));
+  const out = Object.fromEntries([...weeks].map(w => [w, {}]));
+  const put = (d, key, q) => {
+    const w = weekOf(d);
+    (out[w] ||= {}); weeks.add(w);
+    out[w][dayResKey(d, key)] = round3((out[w][dayResKey(d, key)] ?? 0) + q);
+  };
+  const pool = { ...freeStock };
+  const legacy = [];
+  for (const [w, items] of Object.entries(current)) {
+    for (const [k, q] of Object.entries(items)) {
+      if (!(q > EPS)) continue;
+      const { date, key } = splitResKey(k);
+      if (date && date < today) { out[w][k] = q; continue; } // opgegeten
+      if (!(key in pool)) continue; // voorraaditem weg of eenheid gewijzigd
+      if (date) pool[key] += q; else legacy.push({ w, key, q });
+    }
+  }
+  // Oude weekreservering: eerst toewijzen aan de voorbije dagen van die week (opgegeten), de rest terug.
+  const past = Object.keys(dayNeeds).filter(d => d < today).sort();
+  for (const { w, key, q } of legacy) {
+    let left = q;
+    for (const d of past) {
+      if (weekOf(d) !== w) continue;
+      const take = round3(Math.min(dayNeeds[d][key] ?? 0, left));
+      if (take > EPS) { put(d, key, take); left -= take; }
+    }
+    pool[key] += left;
+  }
+  for (const d of Object.keys(dayNeeds).filter(x => x >= today).sort()) {
+    for (const [key, need] of Object.entries(dayNeeds[d])) {
+      if (!(key in pool)) continue;
+      const take = round3(Math.min(need, pool[key]));
+      if (take > EPS) { put(d, key, take); pool[key] -= take; }
+    }
+  }
+  for (const k of Object.keys(pool)) pool[k] = Math.max(0, round3(pool[k]));
+  return { freeStock: pool, reservations: out, weeks: [...weeks].sort() };
+}
+
+/** Wat nog gepland staat (vandaag en later) per voorraaditem. Oude weeksleutels tellen mee tot ze omgezet zijn. */
+export function plannedByKey(reservations, today, currentWeekStart) {
+  const totals = {};
+  for (const [w, items] of Object.entries(reservations)) {
+    if (w < currentWeekStart) continue;
+    for (const [k, v] of Object.entries(items)) {
+      const { date, key } = splitResKey(k);
+      if (date && date < today) continue;
+      totals[key] = round3((totals[key] ?? 0) + v);
+    }
+  }
+  return totals;
+}
+
+/** Alle reserveringen van één week per voorraaditem (ook opgegeten dagen), voor de boodschappenlijst. */
+export function weekReservedByKey(items = {}) {
+  const totals = {};
+  for (const [k, v] of Object.entries(items)) {
+    const { key } = splitResKey(k);
+    totals[key] = round3((totals[key] ?? 0) + v);
+  }
+  return totals;
+}
+
 export function hasChanges(freeStock, currentReservations, weeks, result) {
   for (const [k, v] of Object.entries(result.freeStock)) {
     if (Math.abs((freeStock[k] ?? 0) - v) > EPS) return true;

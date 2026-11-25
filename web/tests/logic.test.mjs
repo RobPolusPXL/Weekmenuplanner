@@ -210,3 +210,26 @@ test('gekoppelde eenheden: noden en boodschappenlijst rekenen om naar de hoofdee
   assert.deepEqual(s.fromStock.map(i => i.itemKey).sort(), ['gepelde tomaat|blik', 'rijst|pak']);
   assert.deepEqual(s.toBuy.map(i => [i.itemKey, i.totalQuantity]), [['rijst|g', 250]]);
 });
+
+test('reconcileDaily: voorbije dagen zijn opgegeten, enkel vandaag en later gepland', async () => {
+  const { reconcileDaily, plannedByKey, weekReservedByKey } = await import('../js/logic/pantry.js');
+  const weekOf = () => '2026-11-22';
+  const K = 'tomatenpuree|stuk';
+  const needs = { '2026-11-22': { [K]: 1 }, '2026-11-23': { [K]: 1 }, '2026-11-25': { [K]: 1 } };
+  // Oude weekreservering van 3 (zoals in Robs gegevens), vrij 2, vandaag woensdag 25/11.
+  const r = reconcileDaily({ [K]: 2 }, { '2026-11-22': { [K]: 3 } }, needs, '2026-11-25', weekOf);
+  assert.deepEqual(r.reservations['2026-11-22'], { [`2026-11-22|${K}`]: 1, [`2026-11-23|${K}`]: 1, [`2026-11-25|${K}`]: 1 });
+  assert.equal(r.freeStock[K], 2);
+  assert.deepEqual(plannedByKey(r.reservations, '2026-11-25', '2026-11-22'), { [K]: 1 });
+  assert.deepEqual(weekReservedByKey(r.reservations['2026-11-22']), { [K]: 3 });
+  // Een dag later: woensdag is opgegeten, niets meer gepland, vrij blijft 2.
+  const r2 = reconcileDaily(r.freeStock, r.reservations, needs, '2026-11-26', weekOf);
+  assert.equal(r2.freeStock[K], 2);
+  assert.deepEqual(plannedByKey(r2.reservations, '2026-11-26', '2026-11-22'), {});
+  // Stabiel: nog eens draaien verandert niets.
+  const r3 = reconcileDaily(r2.freeStock, r2.reservations, needs, '2026-11-26', weekOf);
+  assert.deepEqual(r3, r2);
+  // Toekomstig gerecht schrappen: de reservering komt terug.
+  const r4 = reconcileDaily(r.freeStock, r.reservations, { '2026-11-22': { [K]: 1 }, '2026-11-23': { [K]: 1 } }, '2026-11-25', weekOf);
+  assert.equal(r4.freeStock[K], 3);
+});

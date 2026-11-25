@@ -1,7 +1,7 @@
 // Lezen en schrijven van huishouden, gerechten, dagen, boodschappen en voorraad.
 // De documentvormen zijn exact die van MaaltijdRepository in de Android-app en voldoen aan firestore.rules.
 import { DEFAULT_DISH_TYPES, dishSnapshot, ingredientMap } from '../logic/planner.js';
-import { reconcile as reconcileStock, hasChanges, pantryKey } from '../logic/pantry.js';
+import { reconcileDaily, hasChanges, pantryKey } from '../logic/pantry.js';
 import { round3 } from '../logic/units.js';
 
 const INVITE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -358,7 +358,7 @@ export function createRepo(db) {
      * Verdeelt de voorraad over de geplande maaltijden van de actieve weken, in een transactie op
      * verse data, zodat twee toestellen tegelijk niets dubbel aftrekken.
      */
-    async reconcileStock(hid, trackedIds, needsPerWeek, weeks) {
+    async reconcileStock(hid, trackedIds, dayNeeds, today, weeks, weekOf) {
       const uid = requireUid();
       await db.runTransaction(async tx => {
         const pantrySnaps = await Promise.all(trackedIds.map(id => tx.get(`${H(hid)}/pantry/${id}`)));
@@ -376,18 +376,18 @@ export function createRepo(db) {
           free[key] = item.quantity;
         }
         const current = Object.fromEntries(weeks.map(w => [w, resSnaps[w].exists ? readReservationItems(resSnaps[w].data.items) : {}]));
-        const result = reconcileStock(free, current, needsPerWeek, weeks);
-        if (!hasChanges(free, current, weeks, result)) return false;
+        const result = reconcileDaily(free, current, dayNeeds, today, weekOf);
+        if (!hasChanges(free, current, result.weeks, result)) return false;
 
         for (const [key, q] of Object.entries(result.freeStock)) {
           if (Math.abs((free[key] ?? 0) - q) > 0.0001) {
             tx.update(`${H(hid)}/pantry/${idByKey[key]}`, { quantity: q, updatedAt: ts() });
           }
         }
-        for (const w of weeks) {
+        for (const w of result.weeks) {
           const items = result.reservations[w] ?? {};
           if (!Object.keys(items).length) {
-            if (resSnaps[w].exists) tx.delete(`${H(hid)}/stockReservations/${w}`);
+            if (resSnaps[w]?.exists) tx.delete(`${H(hid)}/stockReservations/${w}`);
           } else {
             tx.set(`${H(hid)}/stockReservations/${w}`, { items, updatedBy: uid, updatedAt: ts() });
           }

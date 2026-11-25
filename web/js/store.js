@@ -2,7 +2,7 @@
 import { createRepo } from './data/repo.js';
 import { today, weekStart, weekDates, addDays, WEEK_START_OPTIONS } from './logic/dates.js';
 import { aggregateGroceryList, pickDishForDay, generateWholeWeek, kindOf } from './logic/planner.js';
-import { splitGroceryList, isLow, isTracked, pantryKey, daysByWeek, activeWeeks, weekNeeds, pantryNeeds, unitFactors, reconcile, hasChanges, parsePantryInput } from './logic/pantry.js';
+import { splitGroceryList, isLow, isTracked, pantryKey, weekNeeds, pantryNeeds, unitFactors, reconcileDaily, plannedByKey, weekReservedByKey, hasChanges, parsePantryInput } from './logic/pantry.js';
 import { parseAmount, capitalize, round3 } from './logic/units.js';
 
 let db = null;
@@ -64,20 +64,14 @@ export function selectedWeekPlans() {
 
 export function groceryList() {
   const items = aggregateGroceryList(Object.values(selectedWeekPlans()), state.weeks[state.selectedWeekStart]?.checked ?? {});
-  return splitGroceryList(items, state.reservations[state.selectedWeekStart] ?? {}, state.pantry);
+  return splitGroceryList(items, weekReservedByKey(state.reservations[state.selectedWeekStart]), state.pantry);
 }
 
 export const cookingDaysInWeek = () => Object.values(selectedWeekPlans()).filter(d => kindOf(d) === 'koken').length;
 export const lowStock = () => state.pantry.filter(isLow);
 
-export function reservedByKey() {
-  const totals = {};
-  for (const [w, items] of Object.entries(state.reservations)) {
-    if (w < state.currentWeekStart) continue;
-    for (const [k, v] of Object.entries(items)) totals[k] = (totals[k] ?? 0) + v;
-  }
-  return totals;
-}
+/** Wat vandaag en later gepland staat, per voorraaditem. Voorbije dagen tellen als opgegeten. */
+export const reservedByKey = () => plannedByKey(state.reservations, today(), state.currentWeekStart);
 
 export function uncheckedGroceryCount() {
   const { toBuy } = groceryList();
@@ -350,12 +344,17 @@ function scheduleReconcile() {
     const tracked = state.pantry.filter(isTracked);
     const free = {};
     for (const p of tracked) if (!(pantryKey(p) in free)) free[pantryKey(p)] = p.quantity;
-    const byWeek = daysByWeek(state.days, weekStartDay());
-    const weeks = activeWeeks(state.currentWeekStart, Object.keys(byWeek), Object.keys(state.reservations));
-    if (!weeks.length) return;
-    const needs = Object.fromEntries(weeks.map(w => [w, pantryNeeds(weekNeeds(byWeek[w] ?? []), tracked)]));
-    const result = reconcile(free, state.reservations, needs, weeks);
-    if (!hasChanges(free, state.reservations, weeks, result)) return;
-    try { await repo.reconcileStock(h, tracked.map(p => p.id), needs, weeks); } catch (e) { console.warn('Voorraad herverdelen mislukt', e); }
+    const t = today();
+    const weekOf = d => weekStart(d, weekStartDay());
+    const dayNeeds = {};
+    for (const day of Object.values(state.days)) {
+      if (!day.dateId || day.dateId < state.currentWeekStart) continue;
+      const n = pantryNeeds(weekNeeds([day]), tracked);
+      if (Object.keys(n).length) dayNeeds[day.dateId] = n;
+    }
+    const current = Object.fromEntries(Object.entries(state.reservations).filter(([w]) => w >= state.currentWeekStart));
+    const result = reconcileDaily(free, current, dayNeeds, t, weekOf);
+    if (!result.weeks.length || !hasChanges(free, current, result.weeks, result)) return;
+    try { await repo.reconcileStock(h, tracked.map(p => p.id), dayNeeds, t, result.weeks, weekOf); } catch (e) { console.warn('Voorraad herverdelen mislukt', e); }
   }, 800);
 }
