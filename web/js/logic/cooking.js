@@ -16,7 +16,7 @@ export function stepTimers(step) {
     const unit = m[3].toLowerCase();
     const factor = unit.startsWith('u') ? 3600 : unit.startsWith('m') ? 60 : 1;
     const seconds = Math.round(value * factor);
-    if (seconds >= 10 && seconds <= 12 * 3600) out.push({ label: m[0].replace(/\s+/g, ' ').trim(), seconds });
+    if (seconds >= 10 && seconds <= 12 * 3600) out.push({ label: m[0].replace(/\s+/g, ' ').trim(), seconds, index: m.index });
   }
   return out;
 }
@@ -40,6 +40,118 @@ export function ingredientsForStep(step, ingredients) {
     const last = name.split(' ').pop();
     return last.length >= 4 && text.includes(last.slice(0, Math.max(4, last.length - 1)));
   });
+}
+
+// Kookwerkwoorden in de stap → infinitief voor het timerlabel. Eerst echte bereidingen, daarna algemene handelingen.
+const COOK_VERBS = [
+  [/\b(?:laat\s+(?:\w+\s+){0,3})?(?:sudder|sudderen|pruttel|pruttelen)\b/, 'sudderen'],
+  [/\b(?:bak|bakt|bakken|aanbakken)\b/, 'bakken'],
+  [/\b(?:braad|braden)\b/, 'braden'],
+  [/\b(?:fruit|fruiten)\b/, 'fruiten'],
+  [/\b(?:kook\s+in|inkoken)\b/, 'inkoken'],
+  [/\b(?:kook|koken|blancheer|blancheren)\b/, 'koken'],
+  [/\b(?:stoof|stoven|smoor|smoren)\b/, 'stoven'],
+  [/\b(?:stoom|stomen)\b/, 'stomen'],
+  [/\b(?:rooster|roosteren)\b/, 'roosteren'],
+  [/\b(?:gril|grill|grillen)\b/, 'grillen'],
+  [/\b(?:gratineer|gratineren)\b/, 'gratineren'],
+  [/\b(?:pocheer|pocheren)\b/, 'pocheren'],
+  [/\boven\b/, 'in de oven'],
+  [/\b(?:gaar|garen)\b/, 'garen'],
+  [/\b(?:marineer|marineren)\b/, 'marineren'],
+  [/\b(?:rust|rusten)\b/, 'laten rusten'],
+  [/\b(?:koel|koelen|afkoelen)\b/, 'laten afkoelen'],
+  [/\b(?:rijs|rijzen)\b/, 'laten rijzen'],
+  [/\b(?:trek|trekken)\b/, 'laten trekken'],
+  [/\b(?:week|weken)\b/, 'laten weken'],
+  [/\b(?:warm|verwarm|opwarmen)\b/, 'opwarmen'],
+  [/\b(?:voeg|voegen|toevoegen)\b/, 'toevoegen'],
+  [/\b(?:roer|roeren)\b/, 'roeren'],
+];
+// Woorden na "de/het" die geen ingrediënt zijn.
+const NOT_FOOD = /^(?:laatste|eerste|tweede|rest|overige|helft|pan|hapjespan|koekenpan|wok|pot|kookpot|braadpan|oven|ovenschaal|schaal|kom|vuur|deksel|bakplaat|plaat|grill|water|tijd|saus|mengsel|bodem|zijkant|borden|bord)$/;
+const LETTER = 'a-zà-ÿ';
+
+function indexOfWord(text, word) {
+  const m = new RegExp(`(?<![${LETTER}])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).exec(text);
+  return m ? m.index : -1;
+}
+
+/** Plaatsen in de tekst waar een ingrediënt genoemd wordt (op naam, of het laatste woord van de naam). */
+function ingredientHits(text, ingredients) {
+  const hits = [];
+  for (const i of ingredients) {
+    const name = (i.name || '').toLowerCase().split(' met ')[0].trim();
+    if (!name) continue;
+    let at = indexOfWord(text, name);
+    let label = name;
+    if (at < 0) {
+      const last = name.split(' ').pop();
+      if (last.length >= 4) {
+        at = indexOfWord(text, last.slice(0, Math.max(4, last.length - 1)));
+        label = last;
+      }
+    }
+    if (at < 0) {
+      // Samengestelde namen: "knoflook" in de tekst bij "knoflookteen", "kipfiletstukjes" bij "kipfiletreepjes".
+      const first = name.split(' ')[0];
+      for (const m of text.matchAll(new RegExp(`[${LETTER}]{4,}`, 'g'))) {
+        const w = m[0];
+        let common = 0;
+        while (common < w.length && common < first.length && w[common] === first[common]) common++;
+        if ((first.startsWith(w) && w.length >= 4) || common >= 6) { at = m.index; label = w; break; }
+      }
+    }
+    if (at >= 0) hits.push({ at, label });
+  }
+  return hits;
+}
+
+/** Zelfstandige naamwoorden na "de" of "het" ("bak de kipfiletstukjes") als ingrediënt niet herkend wordt. */
+function objectHits(text) {
+  const out = [];
+  for (const m of text.matchAll(new RegExp(`(?<![${LETTER}])(?:de|het)\\s+([${LETTER}]{3,})`, 'g'))) {
+    if (!NOT_FOOD.test(m[1])) out.push({ at: m.index + m[0].length - m[1].length, label: m[1] });
+  }
+  return out;
+}
+
+/**
+ * Kort label voor een timer: "Kip bakken", "Penne koken". Zoekt in de zin met de tijd het kookwerkwoord en
+ * het ingrediënt dat het dichtst bij de tijd staat; lukt dat niet, dan het woord na het werkwoord ("Bak de
+ * kipfiletstukjes"). Zonder bruikbaar resultaat: "Stap n".
+ */
+export function timerLabel(stepText, timeIndex, ingredients, stepNumber) {
+  const full = String(stepText);
+  const lower = full.toLowerCase();
+  // De zin waarin de tijd staat.
+  let start = 0;
+  let end = full.length;
+  for (const m of full.matchAll(/[.!?;](?=\s|$)/g)) {
+    if (m.index < timeIndex) start = m.index + 1;
+    else { end = m.index; break; }
+  }
+  const sentence = lower.slice(start, end);
+  const pos = timeIndex - start;
+
+  let verb = null;
+  for (const [re, inf] of COOK_VERBS) {
+    const g = new RegExp(re.source, 'g');
+    let best = null;
+    for (const m of sentence.matchAll(g)) {
+      const d = Math.abs(m.index - pos);
+      if (!best || d < best.d) best = { d };
+    }
+    if (best) { verb = inf; break; }
+  }
+
+  const near = list => list.sort((a, b) => Math.abs(a.at - pos) - Math.abs(b.at - pos))[0]?.label ?? null;
+  const ing = near(ingredientHits(sentence, ingredients)) ?? near(objectHits(sentence));
+
+  if (ing && verb) return capitalize(`${ing} ${verb}`);
+  if (verb) return `Stap ${stepNumber} · ${verb}`;
+  if (ing) return `Stap ${stepNumber} · ${ing}`;
+  return `Stap ${stepNumber}`;
 }
 
 /** Factor voor porties: geplande porties / porties van het recept. */

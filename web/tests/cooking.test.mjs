@@ -8,7 +8,7 @@ test('timers uit stappen', () => {
   assert.deepEqual(stepTimers('Bak 8 minuten en laat dan 10–12 min rusten').map(t => t.seconds), [480, 720]);
   assert.deepEqual(stepTimers('Stoof 1,5 uur op laag vuur').map(t => t.seconds), [5400]);
   assert.deepEqual(stepTimers('Gaar in 2 u').map(t => t.seconds), [7200]);
-  assert.deepEqual(stepTimers('Roer 30 sec'), [{ label: '30 sec', seconds: 30 }]);
+  assert.deepEqual(stepTimers('Roer 30 sec'), [{ label: '30 sec', seconds: 30, index: 5 }]);
   assert.deepEqual(stepTimers('Snijd 2 uien en 3 tomaten'), []);
   assert.equal(formatTimer(605), '10:05'); assert.equal(formatTimer(3725), '1:02:05'); assert.equal(formatTimer(9), '0:09');
 });
@@ -52,4 +52,17 @@ test('boodschappenlijst als tekst', () => {
   const text = groceryText(toBuy, [{ name: 'keukenrol', checked: false, quantity: null, unit: null }, { name: 'koffie', checked: true }], '23/11 – 29/11');
   assert.equal(text, 'Boodschappen 23/11 – 29/11\n\nVlees, vis & vega\n☐ Gehakt – 500 g\n\nPasta, rijst & droge waren\n☐ Spaghetti – 400 g\n\nExtra\n☐ Keukenrol');
   assert.match(groceryText([], [], 'x'), /Niets meer te kopen/);
+});
+
+test('timerLabel: werkwoord + ingrediënt uit de zin met de tijd', async () => {
+  const { timerLabel, stepTimers } = await import('../js/logic/cooking.js');
+  const { parseIngredient } = await import('../js/logic/parser.js');
+  const ings = ['200 gram Kipfiletreepjes met grillkruiden', '1 stuk(s) Knoflookteen', '180 gram Penne', '360 gram Broccoli', '1 el Olijfolie', '150 ml Room'].map(parseIngredient);
+  const label = (text, n) => timerLabel(text, stepTimers(text)[0].index, ings, n);
+  assert.equal(label('Bak de kipfiletstukjes in 1 - 2 minuten rondom bruin.', 3), 'Kipfiletstukjes bakken');
+  assert.equal(label('Verhit 1/4 el olijfolie in dezelfde pan en fruit de knoflook 1 - 2 minuten.', 4), 'Knoflook fruiten');
+  assert.equal(label('Voeg de room en de penne toe. Kook, afgedekt, 15 - 17 minuten, of totdat de penne gaar is.', 5), 'Penne koken');
+  assert.equal(label('Voeg in de laatste 8 - 10 minuten de broccoli toe en roer door.', 6), 'Broccoli toevoegen');
+  assert.equal(label('Laat 10 minuten rusten.', 7), 'Stap 7 · laten rusten');
+  assert.equal(label('Wacht 10 minuten.', 8), 'Stap 8');
 });

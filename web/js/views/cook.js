@@ -2,12 +2,12 @@
 import { esc, icon, openSheet, closeSheet, refreshSheets } from '../ui.js';
 import * as S from '../store.js';
 import { state } from '../store.js';
-import { stepTimers, formatTimer, ingredientsForStep, portionFactor, scaledAmount, DEFAULT_SERVINGS } from '../logic/cooking.js';
+import { stepTimers, timerLabel, formatTimer, ingredientsForStep, portionFactor, scaledAmount, DEFAULT_SERVINGS } from '../logic/cooking.js';
 import { capitalize } from '../logic/units.js';
 
 // ---------- Timers (blijven lopen als je van stap wisselt of het paneel sluit) ----------
 
-const timers = []; // { id, label, end, done }
+const timers = []; // { id, label, end, done, session, step }
 let tickHandle = null;
 let audio = null;
 let alarmHandle = null;
@@ -62,20 +62,22 @@ function tick() {
   refreshSheets();
 }
 
-function startTimer(label, seconds) {
+function startTimer(label, seconds, session, step) {
   unlockAudio();
-  timers.push({ id: Math.random().toString(36).slice(2), label, end: Date.now() + seconds * 1000, done: false });
+  timers.push({ id: Math.random().toString(36).slice(2), label, end: Date.now() + seconds * 1000, done: false, session, step });
   tickHandle ||= setInterval(tick, 1000);
   refreshSheets();
 }
 
-function timersHtml() {
+function timersHtml(session) {
   if (!timers.length) return '';
   const now = Date.now();
   return `<div class="timers">${timers.map(t => {
     const left = Math.max(0, (t.end - now) / 1000);
     return `<div class="timer${t.done ? ' done' : ''}">
-      ${icon(t.done ? 'bell' : 'timer')}<span class="timer-label">${esc(t.label)}</span>
+      ${icon(t.done ? 'bell' : 'timer')}${t.session === session
+        ? `<button class="timer-label timer-goto" data-action="timer-goto" data-step="${t.step}">${esc(t.label)}</button>`
+        : `<span class="timer-label">${esc(t.label)}</span>`}
       <span class="timer-left">${t.done ? 'Klaar' : esc(formatTimer(left))}</span>
       <button class="icon-btn small" data-action="timer-stop" data-id="${t.id}" aria-label="Timer weg">${icon('close')}</button>
     </div>`;
@@ -102,7 +104,9 @@ let cookOpen = false;
 /** Opent de kookmodus voor een gerecht, optioneel gekoppeld aan een geplande dag (voor het aantal personen). */
 export function openCookMode({ dishId = null, dateId = null }) {
   let step = 0; // 0 = overzicht ingrediënten, 1..n = stappen
+  let returnTo = null; // stap waar je was voor je via een timer naar een andere stap keek
   let localPortions = null;
+  const session = dateId ? `day:${dateId}` : `dish:${dishId}`;
 
   const current = () => {
     const day = dateId ? state.days[dateId] : null;
@@ -156,7 +160,7 @@ export function openCookMode({ dishId = null, dateId = null }) {
           <div class="cook-kicker">Stap ${step} van ${n}</div>
           <p class="cook-text">${esc(text)}</p>
           ${found.length ? `<div class="chips">${found.map(t =>
-            `<button class="btn timer-btn" data-action="timer" data-seconds="${t.seconds}" data-label="${esc(`Stap ${step} · ${t.label}`)}">${icon('play')}${esc(t.label)}</button>`).join('')}</div>` : ''}
+            `<button class="btn timer-btn" data-action="timer" data-seconds="${t.seconds}" data-label="${esc(timerLabel(text, t.index, c.ingredients, step))}">${icon('play')}${esc(t.label)}</button>`).join('')}</div>` : ''}
           ${used.length ? `<h4 class="section-label">Nodig in deze stap</h4>${ingList(used)}` : ''}
         </div>`;
       }
@@ -164,7 +168,9 @@ export function openCookMode({ dishId = null, dateId = null }) {
       const dots = !n ? '' : n + 1 > 7 ? `<div class="cook-count">${step ? `${step} / ${n}` : `0 / ${n}`}</div>` : `<div class="cook-dots">${Array.from({ length: n + 1 }, (_, i) =>
         `<button class="dot${i === step ? ' on' : ''}" data-action="goto" data-step="${i}" aria-label="${i ? `Stap ${i}` : 'Ingrediënten'}"></button>`).join('')}</div>`;
 
-      return `${timersHtml()}${body}
+      const back = returnTo != null && returnTo !== step
+        ? `<button class="btn full back-to-step" data-action="return">${icon('left')}${returnTo ? `Terug naar stap ${returnTo}` : 'Terug naar klaarzetten'}</button>` : '';
+      return `${timersHtml(session)}${back}${body}
         <div class="cook-nav">
           <button class="btn" data-action="prev" ${step === 0 ? 'disabled' : ''}>${icon('left')}Vorige</button>
           ${dots}
@@ -175,11 +181,17 @@ export function openCookMode({ dishId = null, dateId = null }) {
     onAction: (a, el) => {
       unlockAudio();
       const c = current();
-      if (a === 'next') step = Math.min(step + 1, c.steps.length);
-      else if (a === 'prev') step = Math.max(0, step - 1);
-      else if (a === 'goto') step = Number(el.dataset.step);
+      if (a === 'next') { step = Math.min(step + 1, c.steps.length); returnTo = null; }
+      else if (a === 'prev') { step = Math.max(0, step - 1); returnTo = null; }
+      else if (a === 'goto') { step = Number(el.dataset.step); returnTo = null; }
+      else if (a === 'timer-goto') {
+        const target = Math.min(Number(el.dataset.step), c.steps.length);
+        if (target !== step) { if (returnTo == null) returnTo = step; step = target; }
+        if (step === returnTo) returnTo = null;
+      }
+      else if (a === 'return') { step = returnTo ?? step; returnTo = null; }
       else if (a === 'done') { closeSheet(); return; }
-      else if (a === 'timer') startTimer(el.dataset.label, Number(el.dataset.seconds));
+      else if (a === 'timer') startTimer(el.dataset.label, Number(el.dataset.seconds), session, step);
       else if (a === 'timer-stop') {
         const i = timers.findIndex(t => t.id === el.dataset.id);
         if (i >= 0) timers.splice(i, 1);
