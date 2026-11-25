@@ -183,22 +183,25 @@ export function openCookMode({ dishId = null, dateId = null }) {
           <div class="cook-kicker">Stap ${step} van ${n}</div>
           <p class="cook-text">${esc(text)}</p>
           ${found.length ? `<div class="chips">${found.map(t =>
-            `<button class="btn timer-btn" data-action="timer" data-seconds="${t.seconds}" data-label="${esc(timerLabel(text, t.index, c.ingredients, step))}">${icon('play')}${esc(t.label)}</button>`).join('')}</div>` : ''}
-          ${used.length ? `<h4 class="section-label">Nodig in deze stap</h4>${ingList(used)}` : ''}
+            `<button class="btn timer-btn" data-action="timer" data-seconds="${t.seconds}" data-label="${esc(timerLabel(text, t.index, c.ingredients, step))}">${icon('timer')}Timer ${esc(t.label)}</button>`).join('')}</div>` : ''}
+          ${used.length ? `<div class="cook-used"><h4 class="section-label">Nodig in deze stap</h4><div class="chips">${used.map(i => {
+            const amount = scaledAmount(i, c.factor);
+            return `<span class="ing-chip">${esc(capitalize(i.name || i.raw))}${amount ? ` · ${esc(amount)}` : ''}</span>`;
+          }).join('')}</div></div>` : ''}
         </div>`;
       }
 
-      const dots = !n ? '' : n + 1 > 7 ? `<div class="cook-count">${step ? `${step} / ${n}` : `0 / ${n}`}</div>` : `<div class="cook-dots">${Array.from({ length: n + 1 }, (_, i) =>
-        `<button class="dot${i === step ? ' on' : ''}" data-action="goto" data-step="${i}" aria-label="${i ? `Stap ${i}` : 'Ingrediënten'}"></button>`).join('')}</div>`;
+      // Voortgang bovenaan: één streepje per stap (het eerste = klaarzetten), tikbaar.
+      const bar = !n ? '' : `<div class="cook-bar" style="grid-template-columns: repeat(${n + 1}, minmax(0, 1fr))">${Array.from({ length: n + 1 }, (_, i) =>
+        `<button class="seg${i <= step ? ' on' : ''}" data-action="goto" data-step="${i}" aria-label="${i ? `Naar stap ${i}` : 'Naar klaarzetten'}"${i === step ? ' aria-current="step"' : ''}></button>`).join('')}</div>`;
 
       const back = returnTo != null && returnTo !== step
         ? `<button class="btn full back-to-step" data-action="return">${icon('left')}${returnTo ? `Terug naar stap ${returnTo}` : 'Terug naar klaarzetten'}</button>` : '';
-      return `${timersHtml(session)}${back}${body}
+      return `${bar}${timersHtml(session)}${back}${body}
         <div class="cook-nav">
-          <button class="btn" data-action="prev" ${step === 0 ? 'disabled' : ''}>${icon('left')}Vorige</button>
-          ${dots}
-          ${step < n ? `<button class="btn primary" data-action="next">${step === 0 ? 'Beginnen' : 'Volgende'}${icon('right')}</button>`
-            : `<button class="btn primary" data-action="done">${icon('check')}Klaar</button>`}
+          <button class="btn" data-action="prev" ${step === 0 ? 'disabled' : ''}>Vorige</button>
+          ${step < n ? `<button class="btn primary grow" data-action="next">${step === 0 ? 'Beginnen' : 'Volgende stap'}</button>`
+            : `<button class="btn primary grow" data-action="done">${icon('check')}Klaar</button>`}
         </div>`;
     },
     onAction: (a, el) => {

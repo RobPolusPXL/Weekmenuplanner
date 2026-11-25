@@ -21,32 +21,33 @@ export function render() {
       : cookDays ? 'De geplande gerechten hebben geen ingrediënten.' : 'Nog geen kookdagen gepland in deze week.'}</p>`;
   } else {
     planned = groupByDepartment(toBuy, i => i.name).map(([key, label, items]) => `
-      <div class="dept"><h3 class="dept-head"><span>${esc(label)}</span><span class="count">${items.filter(i => i.checked).length}/${items.length}</span></h3>
-      ${items.map(groceryRow).join('')}</div>`).join('');
+      <section class="dept"><h3 class="dept-head"><span>${esc(label)}</span><span>${items.filter(i => i.checked).length}/${items.length}</span></h3>
+      <div class="row-card">${items.map(groceryRow).join('')}</div></section>`).join('');
   }
 
-  const stock = fromStock.length ? `<section class="block">
-      <h2 class="block-title">Uit voorraad <span class="count">${fromStock.length}</span></h2>
-      <p class="muted small">Hoef je niet te kopen, wordt van de voorraad afgetrokken.</p>
+  const stock = fromStock.length ? `<section class="block stock-block">
+      <h2 class="block-title">Uit voorraad, niet kopen <span class="count">${fromStock.length}</span></h2>
       <div class="stock-list">${fromStock.map(i => `<div class="stock-row"><span>${esc(capitalize(i.name))}</span><span class="muted">${esc(i.fromStockText)}</span></div>`).join('')}</div>
     </section>` : '';
 
   const looseGroups = groupByDepartment(state.looseItems, i => i.name).map(([key, label, items]) => `
-    <div class="dept"><h3 class="dept-head"><span>${esc(label)}</span><span class="count">${items.filter(i => i.checked).length}/${items.length}</span></h3>
-    ${items.map(looseRow).join('')}</div>`).join('');
+    <section class="dept"><h3 class="dept-head"><span>${esc(label)}</span><span>${items.filter(i => i.checked).length}/${items.length}</span></h3>
+    <div class="row-card">${items.map(looseRow).join('')}</div></section>`).join('');
+  const total = toBuy.length + state.looseItems.length;
+  const done = checkedCount + state.looseItems.filter(i => i.checked).length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
 
   return `<div class="view view-grocery">
     <div class="view-head"><div><h1 class="title">Boodschappen</h1>
       <p class="sub">${cookDays} kookdag${cookDays === 1 ? '' : 'en'} in deze week</p></div>
-      <button class="btn" data-action="share">${icon('share')}Lijst delen</button></div>
+      <button class="icon-btn bordered" data-action="share" aria-label="Lijst delen">${icon('share')}</button></div>
     ${weekNav()}
+    ${total ? `<div class="progress"><div class="progress-text"><span>${done} van ${total} in de kar</span><span>${pct}%</span></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div></div>` : ''}
     <div class="grocery-cols">
-      <div>
-        <section class="block">
-          <h2 class="block-title">Van geplande gerechten <span class="count">${toBuy.length}</span>
-            ${toBuy.length ? `<span class="muted small right">${checkedCount}/${toBuy.length} afgevinkt</span>` : ''}</h2>
-          ${planned}
-        </section>
+      <div class="grocery-main">
+        <h2 class="list-title">Voor de geplande gerechten</h2>
+        ${planned}
         ${stock}
       </div>
       <div>
@@ -72,7 +73,7 @@ export function render() {
 
 function groceryRow(i) {
   return `<label class="g-row${i.checked ? ' done' : ''}">
-    <input type="checkbox" data-grocery="${esc(i.itemKey)}" ${i.checked ? 'checked' : ''}>
+    <input type="checkbox" data-grocery="${esc(i.itemKey)}" ${i.checked ? 'checked' : ''} aria-label="${esc(capitalize(i.name))} afvinken">
     <span class="g-text"><span class="g-name">${esc(capitalize(i.name))}</span>
       ${i.fromStockText ? `<span class="g-stock">+ ${esc(i.fromStockText)} uit voorraad</span>` : ''}
       ${i.dishNames.length ? `<span class="g-dishes">${esc(i.dishNames.join(', '))}</span>` : ''}</span>

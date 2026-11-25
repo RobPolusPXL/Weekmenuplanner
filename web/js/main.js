@@ -8,7 +8,8 @@ import * as week from './views/week.js';
 import * as dishes from './views/dishes.js';
 import * as grocery from './views/grocery.js';
 import * as pantry from './views/pantry.js';
-import * as stats from './views/stats.js';
+import * as more from './views/more.js';
+import { applyAccent } from './theme.js';
 import * as account from './views/account.js';
 
 const TABS = [
@@ -16,11 +17,11 @@ const TABS = [
   { id: 'gerechten', label: 'Gerechten', icon: 'book', view: dishes },
   { id: 'boodschappen', label: 'Boodschappen', icon: 'cart', view: grocery },
   { id: 'voorraad', label: 'Voorraad', icon: 'kitchen', view: pantry },
-  { id: 'statistieken', label: 'Statistieken', icon: 'chart', view: stats },
+  { id: 'meer', label: 'Meer', icon: 'more', view: more },
 ];
 
 const app = document.getElementById('app');
-let active = TABS.find(t => `#${t.id}` === location.hash)?.id ?? 'week';
+let active = TABS.find(t => `#${t.id}` === location.hash)?.id ?? (location.hash === '#statistieken' ? 'meer' : 'week');
 const tab = () => TABS.find(t => t.id === active);
 
 function shell() {
@@ -28,19 +29,11 @@ function shell() {
     const n = id === 'boodschappen' ? S.uncheckedGroceryCount() : id === 'voorraad' ? S.lowStock().length : 0;
     return n ? `<span class="badge">${n > 99 ? '99+' : n}</span>` : '';
   };
-  const h = state.household;
-  const members = h ? `${h.members.length}/2` : '';
-  return `<header class="topbar">
-      <div class="brand"><img src="icons/icon-192.png" alt="" class="brand-ic"><span class="brand-name">Maaltijdplanner</span></div>
-      <div class="topbar-right">
-        ${state.online ? '' : `<span class="offline">Offline</span>`}
-        ${state.demo ? '<span class="demo-tag">Demo</span>' : ''}
-        <button class="household-btn" data-action="household">${icon('people')}<span>Rob &amp; Joke</span><span class="muted">(${members})</span></button>
-      </div>
-    </header>
-    <nav class="tabbar" aria-label="Hoofdmenu">${TABS.map(t => `<a href="#${t.id}" class="tab${t.id === active ? ' on' : ''}" data-tab="${t.id}" ${t.id === active ? 'aria-current="page"' : ''}>
+  const tags = `${state.online ? '' : '<span class="offline">Offline</span>'}${state.demo ? '<span class="demo-tag">Demo</span>' : ''}`;
+  return `<nav class="tabbar" aria-label="Hoofdmenu">
+      <div class="brand"><img src="icons/icon-192.png" alt="" class="brand-ic"><span class="brand-name">Maaltijdplanner</span></div>${TABS.map(t => `<a href="#${t.id}" class="tab${t.id === active ? ' on' : ''}" data-tab="${t.id}" ${t.id === active ? 'aria-current="page"' : ''}>
       <span class="tab-ic">${icon(t.icon)}${badge(t.id)}</span><span class="tab-label">${t.label}</span></a>`).join('')}</nav>
-    <main class="content" id="content">${tab().view.render()}</main>`;
+    <main class="content" id="content">${tags ? `<div class="status-tags">${tags}</div>` : ''}${tab().view.render()}</main>`;
 }
 
 function render() {
@@ -109,6 +102,7 @@ app.addEventListener('submit', e => {
 });
 
 window.addEventListener('hashchange', () => {
+  if (location.hash === '#statistieken') location.hash = '#meer';
   const t = TABS.find(x => `#${x.id}` === location.hash);
   if (t && t.id !== active) { active = t.id; closeAllSheets(); scheduleRender(); }
 });
@@ -117,6 +111,8 @@ dishes.setRerender(scheduleRender);
 S.onChange(scheduleRender);
 
 // ---------- Start ----------
+
+applyAccent();
 
 async function boot() {
   const params = new URLSearchParams(location.search);

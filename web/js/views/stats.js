@@ -24,7 +24,7 @@ export function render() {
   const tile = (n, l, cls = '') => `<div class="tile ${cls}"><span class="tile-n">${n}</span><span class="tile-l">${l}</span></div>`;
   const cookedPct = s.total ? Math.round((s.cooked / s.total) * 100) : 0;
   return `<div class="view view-stats">
-    <div class="view-head"><div><h1 class="title">Statistieken</h1><p class="sub">Enkel dagen tot en met vandaag tellen mee.</p></div>
+    <div class="view-head"><div><h2 class="title-2">Statistieken</h2><p class="sub">Enkel dagen tot en met vandaag tellen mee.</p></div>
       <div class="segmented" role="tablist">
         <button class="${mode === 'maand' ? 'on' : ''}" data-action="mode" data-mode="maand">Maand</button>
         <button class="${mode === 'jaar' ? 'on' : ''}" data-action="mode" data-mode="jaar">Jaar</button></div></div>
