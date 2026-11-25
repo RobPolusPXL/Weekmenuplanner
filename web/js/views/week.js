@@ -61,9 +61,9 @@ function tonightCard(id, day) {
       <div class="tonight-actions"><button class="btn primary grow" data-action="open-day" data-date="${id}">${icon('plus')}Plannen</button></div>
     </section>`;
   }
-  return `<section class="tonight" aria-label="Vanavond">
+  return `<section class="tonight marker" aria-label="Vanavond">
     <div class="tonight-kicker">${esc(kicker)}</div>
-    <div class="tonight-name">${esc(DAY_KINDS[kind])}</div>
+    <div class="tonight-name">${icon(KIND_ICON[kind])}${esc(DAY_KINDS[kind])}</div>
     ${day?.note ? `<div class="tonight-meta">${esc(day.note)}</div>` : ''}
     <div class="tonight-actions"><button class="btn" data-action="open-day" data-date="${id}">Wijzigen</button></div>
   </section>`;
@@ -74,7 +74,7 @@ function dayRow(id, day, isToday, isPast) {
   let text;
   if (kind === 'koken' && day.dishSnapshot) text = esc(day.dishSnapshot.name);
   else if (kind === 'leeg') text = isPast ? 'Niets gepland' : 'Nog niets gepland';
-  else text = `${esc(DAY_KINDS[kind])}${day?.note ? ` <span class="muted">· ${esc(day.note)}</span>` : ''}`;
+  else text = `<span class="row-marker">${icon(KIND_ICON[kind])}${esc(DAY_KINDS[kind])}</span>${day?.note ? ` <span class="row-note">· ${esc(day.note)}</span>` : ''}`;
   let end;
   if (isToday) end = '<span class="row-tag today">Vandaag</span>';
   else if (isPast) end = kind === 'koken' || kind === 'opwarm' ? '<span class="row-tag">Gegeten</span>' : '';

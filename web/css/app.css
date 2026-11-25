@@ -205,10 +205,21 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--primary); 
 .week-row:hover { background: var(--surface-2); }
 .row-day { flex: none; width: 42px; font-size: 13px; font-weight: 700; }
 .row-text { flex: 1; min-width: 0; font-weight: 600; }
-.week-row.kind-leeg .row-text, .week-row.kind-afhaal .row-text, .week-row.kind-opwarm .row-text, .week-row.kind-niet_koken .row-text { font-weight: 500; color: var(--muted); }
+.week-row.kind-leeg .row-text { font-weight: 500; color: var(--muted); }
+/* Afhaal, opwarm en niet koken: eigen kleur en pictogram, zodat ze meteen opvallen (zoals in de vorige versie). */
+.week-row.kind-afhaal, .week-row.kind-opwarm, .week-row.kind-niet_koken { background: var(--saffron-soft); }
+.row-marker { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--saffron); }
+.row-marker .ic { width: 18px; height: 18px; }
+.row-note { font-weight: 500; color: var(--muted); }
+.week-row.kind-afhaal .row-text, .week-row.kind-opwarm .row-text, .week-row.kind-niet_koken .row-text { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; }
+.week-row.past .row-marker { opacity: .75; }
+.tonight.marker { background: var(--saffron-soft); border-color: transparent; }
+.tonight.marker .tonight-name { display: flex; align-items: center; gap: 10px; color: var(--saffron); }
+.tonight.marker .tonight-name .ic { width: 26px; height: 26px; }
 .week-row.past { color: var(--muted); }
 .week-row.past .row-text { font-weight: 500; color: var(--muted); }
 .week-row.today { background: var(--primary-soft); }
+.week-row.today.kind-afhaal, .week-row.today.kind-opwarm, .week-row.today.kind-niet_koken { background: var(--saffron-soft); box-shadow: inset 0 0 0 2px var(--primary); }
 .week-row.today .row-day, .week-row.today .row-tag { color: var(--on-primary-soft); font-weight: 800; }
 .week-row.today .row-text { font-weight: 700; color: var(--fg); }
 .row-tag { flex: none; font-size: 12px; font-weight: 600; color: var(--muted); }
