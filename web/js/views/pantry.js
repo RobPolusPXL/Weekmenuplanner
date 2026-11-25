@@ -1,10 +1,10 @@
 // Voorraad: wat in huis is komt niet op de boodschappenlijst; geplande gerechten trekken het af.
-import { esc, icon, openSheet, closeSheet, confirmSheet } from '../ui.js';
+import { esc, icon, openSheet, closeSheet, confirmSheet, refreshSheets } from '../ui.js';
 import * as S from '../store.js';
 import { state } from '../store.js';
 import { groupByDepartment } from '../logic/departments.js';
-import { capitalize, formatQuantity, formatNumber } from '../logic/units.js';
-import { isLow, pantryKey } from '../logic/pantry.js';
+import { capitalize, formatQuantity, formatNumber, parseAmount } from '../logic/units.js';
+import { isLow, pantryKey, PANTRY_UNITS } from '../logic/pantry.js';
 
 let add = { text: '', min: '' };
 
@@ -49,6 +49,7 @@ function pantryRow(p, reserved) {
   const sub = [];
   if (reserved > 0.0001) sub.push(`${formatQuantity(reserved, p.unit)} gepland`);
   if (p.minQuantity != null) sub.push(`min. ${formatQuantity(p.minQuantity, p.unit)}`);
+  for (const [u, f] of Object.entries(p.altUnits ?? {})) sub.push(linkText(p.unit, u, f));
   return `<button class="p-row" data-action="edit" data-id="${esc(p.id)}">
     <span class="p-text"><span class="p-name">${esc(capitalize(p.name))}</span>${sub.length ? `<span class="muted small">${esc(sub.join(' · '))}</span>` : ''}</span>
     <span class="amount${isLow(p) ? ' low' : ''}">${esc(freeText(p))}</span>
@@ -74,21 +75,64 @@ export function onSubmit(form, rerender) {
   setTimeout(() => document.getElementById('pantry-text')?.focus(), 0);
 }
 
+const linkText = (main, unit, factor) => `1 ${main ?? 'stuk'} = ${formatNumber(factor)} ${unit}`;
+
+function unitOptions(selected, exclude = []) {
+  const list = [...new Set([...(selected ? [selected] : []), ...PANTRY_UNITS])].filter(u => u === selected || !exclude.includes(u));
+  return list.map(u => `<option value="${esc(u)}"${u === selected ? ' selected' : ''}>${esc(u)}</option>`).join('');
+}
+
+/** Uitleg bij een andere hoofdeenheid: omgerekend via een koppeling naar de oude eenheid, of hetzelfde getal. */
+function unitChangeNote(item, f) {
+  const total = (item.quantity ?? 0) + (S.reservedByKey()[pantryKey(item)] ?? 0);
+  const link = f.alt.find(a => a.unit === (item.unit ?? 'stuk'));
+  return link
+    ? `Wordt omgerekend: ${formatNumber(total)} ${item.unit} = ${formatNumber(total / link.factor)} ${f.unit} (vóór aftrek van wat gepland is).`
+    : `Het getal blijft hetzelfde: ${formatNumber(total)} ${f.unit} (vóór aftrek van wat gepland is). Koppel ${item.unit} hieronder om om te rekenen.`;
+}
+
+/** Minimum zoals getoond: bij een andere hoofdeenheid met koppeling naar de oude omgerekend, tot je het zelf aanpast. */
+function minValue(item, f) {
+  if (f.minTouched || f.unit === (item.unit ?? 'stuk') || item.minQuantity == null) return f.min;
+  const link = f.alt.find(a => a.unit === (item.unit ?? 'stuk'));
+  return link ? formatNumber(item.minQuantity / link.factor) : f.min;
+}
+
 function openEdit(item) {
-  const unit = item.unit ? ` (${item.unit})` : '';
-  const f = { add: '', exact: '', min: item.minQuantity != null ? formatNumber(item.minQuantity) : '' };
+  const f = {
+    add: '', exact: '', min: item.minQuantity != null ? formatNumber(item.minQuantity) : '',
+    unit: item.unit ?? 'stuk',
+    alt: Object.entries(item.altUnits ?? {}).map(([unit, factor]) => ({ unit, factor })),
+    newFactor: '', newUnit: '', error: '', minTouched: false,
+  };
+  const tracked = item.quantity != null;
   openSheet({
     title: capitalize(item.name),
     render: () => {
       const cur = state.pantry.find(p => p.id === item.id) ?? item;
       const reserved = S.reservedByKey()[pantryKey(cur)] ?? 0;
+      const u = ` (${f.unit})`;
+      const taken = [f.unit, ...f.alt.map(a => a.unit)];
+      const newUnit = f.newUnit && !taken.includes(f.newUnit) ? f.newUnit : PANTRY_UNITS.find(x => !taken.includes(x));
+      f.newUnit = newUnit;
       return `<p class="lead">Vrij: <strong>${esc(freeText(cur))}</strong>${reserved > 0.0001 ? ` · gepland: ${esc(formatQuantity(reserved, cur.unit))}` : ''}</p>
       <form class="form" data-form="edit">
-        <label class="field"><span>Aanvullen met${esc(unit)}</span><input id="pe-add" value="${esc(f.add)}" inputmode="decimal" placeholder="bv. 500">
+        ${tracked ? `<label class="field"><span>Eenheid</span><select id="pe-unit">${unitOptions(f.unit)}</select>
+          ${f.unit !== (item.unit ?? 'stuk') ? `<small class="muted">${esc(unitChangeNote(item, f))}</small>` : ''}</label>` : ''}
+        <label class="field"><span>Aanvullen met${esc(tracked ? u : '')}</span><input id="pe-add" value="${esc(f.add)}" inputmode="decimal" placeholder="bv. 500">
           <small class="muted">Negatief = verbruikt, bv. -200</small></label>
-        <label class="field"><span>Of exact vrij instellen op${esc(unit)}</span><input id="pe-exact" value="${esc(f.exact)}" inputmode="decimal"></label>
-        <label class="field"><span>Minimumvoorraad${esc(unit)}</span><input id="pe-min" value="${esc(f.min)}" inputmode="decimal">
+        <label class="field"><span>Of exact vrij instellen op${esc(tracked ? u : '')}</span><input id="pe-exact" value="${esc(f.exact)}" inputmode="decimal"></label>
+        <label class="field"><span>Minimumvoorraad${esc(tracked ? u : '')}</span><input id="pe-min" value="${esc(minValue(item, f))}" inputmode="decimal">
           <small class="muted">Melding als het minder wordt. Leeg = pas als het op is.</small></label>
+        ${tracked ? `<div class="field"><span>Gekoppelde eenheden</span>
+          <small class="muted">Ook aftrekken als een gerecht dit product in een andere eenheid gebruikt.</small>
+          <div class="list">${f.alt.map((a, i) => `<div class="list-row"><span>${esc(linkText(f.unit, a.unit, a.factor))}</span>
+            <button type="button" class="icon-btn danger" data-action="alt-del" data-i="${i}" aria-label="Koppeling weg">${icon('trash')}</button></div>`).join('')}</div>
+          ${newUnit ? `<div class="link-row"><span class="link-eq">1 ${esc(f.unit)} =</span>
+            <input id="pe-alt-factor" value="${esc(f.newFactor)}" inputmode="decimal" placeholder="bv. 400">
+            <select id="pe-alt-unit">${unitOptions(newUnit, taken)}</select>
+            <button type="button" class="btn" data-action="alt-add" ${parseAmount(f.newFactor) > 0 ? '' : 'disabled'}>${icon('plus')}Koppelen</button></div>` : ''}
+          ${f.error ? `<p class="error">${esc(f.error)}</p>` : ''}</div>` : ''}
         <div class="row-end">
           <button type="button" class="btn danger-ghost" data-action="delete">${icon('trash')}Verwijderen</button>
           <button type="submit" class="btn primary">Opslaan</button>
@@ -98,17 +142,28 @@ function openEdit(item) {
     onInput: el => {
       if (el.id === 'pe-add') f.add = el.value;
       else if (el.id === 'pe-exact') f.exact = el.value;
-      else if (el.id === 'pe-min') f.min = el.value;
+      else if (el.id === 'pe-min') { f.min = el.value; f.minTouched = true; }
+      else if (el.id === 'pe-unit') { f.unit = el.value; f.alt = f.alt.filter(a => a.unit !== f.unit); refreshSheets(); }
+      else if (el.id === 'pe-alt-unit') f.newUnit = el.value;
+      else if (el.id === 'pe-alt-factor') { const had = parseAmount(f.newFactor) > 0; f.newFactor = el.value; f.error = ''; if (had !== parseAmount(el.value) > 0) refreshSheets(); }
     },
-    onAction: a => {
-      if (a === 'delete') confirmSheet({
+    onAction: (a, el) => {
+      if (a === 'alt-add') {
+        const factor = parseAmount(f.newFactor);
+        if (!(factor > 0)) { f.error = 'Geef een getal groter dan 0.'; refreshSheets(); return; }
+        f.alt.push({ unit: f.newUnit, factor });
+        f.newFactor = ''; f.newUnit = '';
+        refreshSheets();
+      } else if (a === 'alt-del') { f.alt.splice(Number(el.dataset.i), 1); refreshSheets(); }
+      else if (a === 'delete') confirmSheet({
         title: 'Uit voorraad verwijderen', message: `${capitalize(item.name)} uit de voorraad verwijderen?`,
         onConfirm: () => { S.deletePantry(item); closeSheet(); },
       });
     },
     onSubmit: () => {
       const cur = state.pantry.find(p => p.id === item.id) ?? item;
-      S.updatePantry(cur, f.add, f.exact, f.min);
+      if (tracked) S.updatePantry(cur, f.add, f.exact, minValue(item, f), f.unit, Object.fromEntries(f.alt.map(a => [a.unit, a.factor])));
+      else S.updatePantry(cur, f.add, f.exact, f.min);
       closeSheet();
     },
   });

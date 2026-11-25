@@ -189,3 +189,24 @@ test('parseRecipeHtml leest stappen (HowToStep met HTML-lijst) en porties', () =
   assert.equal(r.servings, 2);
   assert.equal(parseRecipeHtml(html.replace('"recipeYield":2', '"recipeYield":["4 personen"]')).servings, 4);
 });
+
+test('gekoppelde eenheden: noden en boodschappenlijst rekenen om naar de hoofdeenheid', async () => {
+  const { pantryNeeds, pantryLinks } = await import('../js/logic/pantry.js');
+  const pantry = [
+    { id: '1', name: 'gepelde tomaat', unit: 'stuk', quantity: 8, altUnits: { blik: 1 } },
+    { id: '2', name: 'rijst', unit: 'pak', quantity: 2, altUnits: { g: 500 } },
+    { id: '3', name: 'ui', unit: 'stuk', quantity: 3, altUnits: {} },
+  ];
+  assert.deepEqual(pantryNeeds({ 'gepelde tomaat|blik': 1, 'rijst|g': 750, 'rijst|pak': 1, 'ui|g': 200, 'kaas|g': 50 }, pantry),
+    { 'gepelde tomaat|stuk': 1, 'rijst|pak': 2.5 });
+  assert.equal(pantryLinks(pantry)['ui|g'], undefined);
+  const items = [
+    { itemKey: 'gepelde tomaat|blik', name: 'gepelde tomaat', totalQuantity: 1, canonicalUnit: 'blik' },
+    { itemKey: 'rijst|g', name: 'rijst', totalQuantity: 750, canonicalUnit: 'g' },
+    { itemKey: 'rijst|pak', name: 'rijst', totalQuantity: 1, canonicalUnit: 'pak' },
+  ];
+  // Gereserveerd: 1 stuk tomaat; 2 pak rijst (1 pak voor de pak-regel, 1 pak = 500 g voor de g-regel).
+  const s = splitGroceryList(items, { 'gepelde tomaat|stuk': 1, 'rijst|pak': 2 }, pantry);
+  assert.deepEqual(s.fromStock.map(i => i.itemKey).sort(), ['gepelde tomaat|blik', 'rijst|pak']);
+  assert.deepEqual(s.toBuy.map(i => [i.itemKey, i.totalQuantity]), [['rijst|g', 250]]);
+});

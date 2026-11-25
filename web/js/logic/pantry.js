@@ -13,6 +13,47 @@ const EPS = 0.0001;
 export const pantryKey = item => `${item.name}|${item.unit ?? ''}`;
 export const isTracked = item => item.quantity != null;
 
+/** Eenheden die een voorraaditem kan kiezen (basiseenheden zoals de parser ze geeft). */
+export const PANTRY_UNITS = ['g', 'ml', 'stuk', 'blik', 'pak', 'pot', 'zakje', 'el', 'tl', 'teen', 'bos', 'plak', 'snee'];
+
+/**
+ * Hoeveel van elke eenheid overeenkomt met 1 hoofdeenheid van het item.
+ * altUnits { g: 400 } bij hoofdeenheid "blik" betekent: 1 blik = 400 g.
+ */
+export function unitFactors(item) {
+  const out = { [item.unit ?? '']: 1 };
+  for (const [u, f] of Object.entries(item.altUnits ?? {})) {
+    if (u && u !== (item.unit ?? '') && Number.isFinite(f) && f > 0) out[u] = f;
+  }
+  return out;
+}
+
+/**
+ * Welk voorraaditem dekt een boodschappenregel (naam|eenheid), en met welke factor.
+ * Een item met die eenheid als hoofdeenheid gaat voor op een gekoppelde eenheid.
+ * → { itemKey: { key: pantryKey, factor } }
+ */
+export function pantryLinks(pantry) {
+  const links = {};
+  const tracked = pantry.filter(isTracked);
+  for (const p of tracked) links[pantryKey(p)] ??= { key: pantryKey(p), factor: 1 };
+  for (const p of tracked) {
+    for (const [u, f] of Object.entries(unitFactors(p))) links[`${p.name}|${u}`] ??= { key: pantryKey(p), factor: f };
+  }
+  return links;
+}
+
+/** Zet de noden van een week (per boodschappenregel) om naar noden per voorraaditem, in zijn hoofdeenheid. */
+export function pantryNeeds(needs, pantry) {
+  const links = pantryLinks(pantry);
+  const out = {};
+  for (const [itemKey, q] of Object.entries(needs)) {
+    const l = links[itemKey];
+    if (l) out[l.key] = round3((out[l.key] ?? 0) + q / l.factor);
+  }
+  return out;
+}
+
 /** Op of onder het minimum (of helemaal op als er geen minimum is). */
 export function isLow(item) {
   if (item.quantity == null) return false;
@@ -80,14 +121,39 @@ export function hasChanges(freeStock, currentReservations, weeks, result) {
   return false;
 }
 
+/**
+ * Verdeelt de reserveringen (per voorraaditem, in de hoofdeenheid) over de boodschappenregels.
+ * → { itemKey: gedekte hoeveelheid in de eenheid van de regel }
+ */
+function coveredPerLine(items, reserved, pantry) {
+  const links = pantryLinks(pantry);
+  const left = { ...reserved };
+  const covered = {};
+  // Regels in de hoofdeenheid eerst, daarna de gekoppelde eenheden.
+  const lines = items.filter(i => i.totalQuantity != null && links[i.itemKey])
+    .sort((a, b) => (links[a.itemKey].factor === 1 ? 0 : 1) - (links[b.itemKey].factor === 1 ? 0 : 1));
+  for (const item of lines) {
+    const { key, factor } = links[item.itemKey];
+    const avail = (left[key] ?? 0) * factor;
+    const take = round3(Math.min(item.totalQuantity, avail));
+    if (take > EPS) { covered[item.itemKey] = take; left[key] = (left[key] ?? 0) - take / factor; }
+  }
+  // Reserveringen zonder voorraaditem (oude gegevens) blijven gelden op hun eigen regel.
+  for (const item of items) {
+    if (!(item.itemKey in covered) && !links[item.itemKey] && reserved[item.itemKey] > EPS) covered[item.itemKey] = reserved[item.itemKey];
+  }
+  return covered;
+}
+
 /** Splitst de boodschappenlijst van een week in "nog kopen" en "uit voorraad". */
 export function splitGroceryList(items, reserved, pantry) {
   const basisNames = new Set(pantry.filter(p => !isTracked(p)).map(p => p.name));
+  const covered = coveredPerLine(items, reserved, pantry);
   const toBuy = [];
   const fromStock = [];
   for (const item of items) {
     const total = item.totalQuantity;
-    const r = reserved[item.itemKey] ?? 0;
+    const r = covered[item.itemKey] ?? 0;
     if (basisNames.has(item.name)) {
       fromStock.push({ ...item, fromStockText: 'in huis' });
     } else if (total == null) {

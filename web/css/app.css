@@ -94,6 +94,9 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--primary); 
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .input-row { display: flex; gap: 8px; align-items: flex-end; }
 .input-row > input, .input-row .grow { flex: 1; min-width: 0; }
+.link-row { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; margin-top: 8px; }
+.link-row .link-eq { white-space: nowrap; }
+.link-row .btn { grid-column: 1 / -1; justify-self: end; }
 .row-end { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
 .top-gap { margin-top: 14px; }
 .check-label { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; white-space: nowrap; }

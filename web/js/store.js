@@ -2,8 +2,8 @@
 import { createRepo } from './data/repo.js';
 import { today, weekStart, weekDates, addDays, WEEK_START_OPTIONS } from './logic/dates.js';
 import { aggregateGroceryList, pickDishForDay, generateWholeWeek, kindOf } from './logic/planner.js';
-import { splitGroceryList, isLow, isTracked, pantryKey, daysByWeek, activeWeeks, weekNeeds, reconcile, hasChanges, parsePantryInput } from './logic/pantry.js';
-import { parseAmount, capitalize } from './logic/units.js';
+import { splitGroceryList, isLow, isTracked, pantryKey, daysByWeek, activeWeeks, weekNeeds, pantryNeeds, unitFactors, reconcile, hasChanges, parsePantryInput } from './logic/pantry.js';
+import { parseAmount, capitalize, round3 } from './logic/units.js';
 
 let db = null;
 let repo = null;
@@ -293,22 +293,44 @@ export function finishShopping() {
 export function addPantry(text, minText) {
   const parsed = parsePantryInput(text);
   if (!parsed) { toast('Geef een product op, bv. "1 kg rijst" of "zout".'); return; }
-  const min = minText.trim() ? parseAmount(minText) : null;
-  const existing = state.pantry.find(p => p.name === parsed.name && (p.unit ?? null) === (parsed.unit ?? null));
+  let min = minText.trim() ? parseAmount(minText) : null;
+  // Zelfde product in de hoofdeenheid, of anders in een gekoppelde eenheid (dan omrekenen).
+  const existing = state.pantry.find(p => p.name === parsed.name && (p.unit ?? null) === (parsed.unit ?? null))
+    ?? state.pantry.find(p => p.name === parsed.name && parsed.unit && p.altUnits?.[parsed.unit] > 0);
+  const factor = existing ? unitFactors(existing)[parsed.unit ?? ''] ?? 1 : 1;
+  if (factor !== 1) {
+    if (parsed.quantity != null) parsed.quantity /= factor;
+    if (min != null) min /= factor;
+  }
   run(async h => {
     await repo.addOrRefillPantry(h, existing, parsed, min);
     toast(existing ? `${capitalize(parsed.name)} aangevuld.` : `${capitalize(parsed.name)} toegevoegd aan voorraad.`);
   }, 'Kon voorraad niet bijwerken.');
 }
-/** Aanvullen (mag negatief) of exact instellen, plus minimumvoorraad. */
-export function updatePantry(item, addText, exactText, minText) {
+/**
+ * Aanvullen (mag negatief) of exact instellen, minimumvoorraad, hoofdeenheid en gekoppelde eenheden.
+ * altUnits: { eenheid: hoeveel daarvan in 1 hoofdeenheid }.
+ */
+export function updatePantry(item, addText, exactText, minText, unit = item.unit ?? null, altUnits = item.altUnits ?? {}) {
   const exact = exactText.trim() ? parseAmount(exactText) : null;
   const delta = Number(addText.trim().replace(',', '.'));
   let q = item.quantity;
+  const unitChanged = (unit ?? null) !== (item.unit ?? null);
+  if (unitChanged) {
+    if (state.pantry.some(p => p.id !== item.id && p.name === item.name && (p.unit ?? null) === (unit ?? null))) {
+      toast(`${capitalize(item.name)} staat al in de voorraad met eenheid ${unit}.`); return;
+    }
+    // Wat nu gepland staat onder de oude eenheid komt terug bij de vrije voorraad; daarna wordt opnieuw verdeeld.
+    if (q != null) q = round3(q + (reservedByKey()[pantryKey(item)] ?? 0));
+  }
+  // Is de oude eenheid gekoppeld (bv. 1 pak = 500 g), dan wordt omgerekend; anders blijft het getal hetzelfde.
+  const conv = unitChanged ? altUnits[item.unit ?? ''] ?? 1 : 1;
+  if (q != null) q = round3(q / conv);
   if (exact != null) q = exact;
-  else if (addText.trim() && Number.isFinite(delta)) q = Math.max(0, (item.quantity ?? 0) + delta);
+  else if (addText.trim() && Number.isFinite(delta)) q = Math.max(0, (q ?? 0) + delta);
   const min = minText.trim() ? parseAmount(minText) : null;
-  run(h => repo.updatePantry(h, item.id, q, min), 'Kon voorraad niet bijwerken.');
+  const alt = Object.fromEntries(Object.entries(altUnits).filter(([u, f]) => u && u !== unit && Number.isFinite(f) && f > 0));
+  run(h => repo.updatePantry(h, item.id, q, min, unit, alt), 'Kon voorraad niet bijwerken.');
 }
 export const deletePantry = item => run(h => repo.deletePantry(h, item.id), 'Kon voorraaditem niet verwijderen.');
 export function lowStockToList(item) {
@@ -331,7 +353,7 @@ function scheduleReconcile() {
     const byWeek = daysByWeek(state.days, weekStartDay());
     const weeks = activeWeeks(state.currentWeekStart, Object.keys(byWeek), Object.keys(state.reservations));
     if (!weeks.length) return;
-    const needs = Object.fromEntries(weeks.map(w => [w, weekNeeds(byWeek[w] ?? [])]));
+    const needs = Object.fromEntries(weeks.map(w => [w, pantryNeeds(weekNeeds(byWeek[w] ?? []), tracked)]));
     const result = reconcile(free, state.reservations, needs, weeks);
     if (!hasChanges(free, state.reservations, weeks, result)) return;
     try { await repo.reconcileStock(h, tracked.map(p => p.id), needs, weeks); } catch (e) { console.warn('Voorraad herverdelen mislukt', e); }

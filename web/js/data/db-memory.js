@@ -38,7 +38,9 @@ export function createMemoryDb() {
     if (!docs.has(path)) throw new Error(`Document bestaat niet: ${path}`);
     const prev = docs.get(path);
     const next = { ...prev };
-    for (const [k, v] of Object.entries(data)) next[k] = resolve(v, prev[k]);
+    for (const [k, v] of Object.entries(data)) {
+      if (v?.__delete) delete next[k]; else next[k] = resolve(v, prev[k]);
+    }
     docs.set(path, next);
   }
 
@@ -50,6 +52,7 @@ export function createMemoryDb() {
     kind: 'memory',
     ts: () => ({ __ts: true }),
     arrayUnion: (...values) => ({ __arrayUnion: values }),
+    deleteField: () => ({ __delete: true }),
     newId: () => `demo${Date.now().toString(36)}${(idCounter++).toString(36)}`,
     uid: () => user?.uid ?? null,
 

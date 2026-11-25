@@ -100,7 +100,11 @@ export function readLooseItem({ id, data }) {
 export function readPantryItem({ id, data }) {
   const name = str(data.name);
   if (!name) return null;
-  return { id, name, unit: str(data.unit), quantity: num(data.quantity), minQuantity: num(data.minQuantity) };
+  const altUnits = {};
+  if (data.altUnits && typeof data.altUnits === 'object') {
+    for (const [u, f] of Object.entries(data.altUnits)) if (typeof f === 'number' && f > 0) altUnits[u] = f;
+  }
+  return { id, name, unit: str(data.unit), quantity: num(data.quantity), minQuantity: num(data.minQuantity), altUnits };
 }
 
 function readReservationItems(raw) {
@@ -338,11 +342,13 @@ export function createRepo(db) {
         await db.set(`${H(hid)}/pantry/${db.newId(`${H(hid)}/pantry`)}`, payload);
       }
     },
-    async updatePantry(hid, id, quantity, minQuantity) {
+    async updatePantry(hid, id, quantity, minQuantity, unit, altUnits) {
       requireUid();
-      await db.update(`${H(hid)}/pantry/${id}`, {
-        quantity: quantity == null ? null : round3(quantity), minQuantity, updatedAt: ts(),
-      });
+      const upd = { quantity: quantity == null ? null : round3(quantity), minQuantity, updatedAt: ts() };
+      if (unit !== undefined) upd.unit = unit || null;
+      // Leeg = veld weg, zodat items zonder koppelingen er hetzelfde uitzien als voorheen.
+      if (altUnits !== undefined) upd.altUnits = Object.keys(altUnits).length ? altUnits : db.deleteField();
+      await db.update(`${H(hid)}/pantry/${id}`, upd);
     },
     async deletePantry(hid, id) {
       requireUid();

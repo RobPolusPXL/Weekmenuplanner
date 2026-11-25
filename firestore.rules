@@ -140,13 +140,14 @@ service cloud.firestore {
 
     function isValidPantryItem(data) {
       return data.keys().hasAll(['name', 'createdBy', 'createdAt', 'updatedAt']) &&
-             data.keys().hasOnly(['name', 'unit', 'quantity', 'minQuantity', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['name', 'unit', 'quantity', 'minQuantity', 'altUnits', 'createdBy', 'createdAt', 'updatedAt']) &&
              data.name is string &&
              data.name.size() >= 1 &&
              data.name.size() <= 120 &&
              (!('unit' in data) || data.unit == null || (data.unit is string && data.unit.size() <= 30)) &&
              (!('quantity' in data) || data.quantity == null || isValidAmount(data.quantity)) &&
              (!('minQuantity' in data) || data.minQuantity == null || isValidAmount(data.minQuantity)) &&
+             (!('altUnits' in data) || data.altUnits == null || (data.altUnits is map && data.altUnits.size() <= 12)) &&
              data.createdBy is string &&
              data.createdBy.size() >= 1 &&
              data.createdBy.size() <= 128 &&
@@ -308,7 +309,7 @@ service cloud.firestore {
                          isValidPantryItem(incoming()) &&
                          incoming().createdBy == existing().createdBy &&
                          incoming().createdAt == existing().createdAt &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'unit', 'quantity', 'minQuantity', 'updatedAt']) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'unit', 'quantity', 'minQuantity', 'altUnits', 'updatedAt']) &&
                          isHouseholdMember(hid);
 
         allow delete: if isSignedIn() && isValidId(hid) && isValidId(itemId) && isHouseholdMember(hid);

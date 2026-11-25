@@ -39,6 +39,7 @@ export async function createFirebaseDb() {
   function encode(value) {
     if (value === SENTINEL_TS || value?.__ts) return fs.serverTimestamp();
     if (value && value.__arrayUnion) return fs.arrayUnion(...value.__arrayUnion);
+    if (value && value.__delete) return fs.deleteField();
     if (Array.isArray(value)) return value.map(encode);
     if (value && typeof value === 'object' && !(value instanceof Date)) {
       return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, encode(v)]));
@@ -52,6 +53,7 @@ export async function createFirebaseDb() {
     kind: 'firebase',
     ts: () => SENTINEL_TS,
     arrayUnion: (...values) => ({ __arrayUnion: values }),
+    deleteField: () => ({ __delete: true }),
     newId: path => fs.doc(colRef(path)).id,
     uid: () => currentUser?.uid ?? null,
 
