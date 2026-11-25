@@ -8,7 +8,7 @@
 :root {
   /* Kleurenschema (lightColorScheme uit Theme.kt) */
   --primary: #C85A32; --on-primary: #FFFFFF; --primary-container: #FFDBD0; --on-primary-container: #3A0B00;
-  --secondary: #4A6B53; --on-secondary: #FFFFFF; --secondary-container: #CCE8D1; --on-secondary-container: #062111;
+  --secondary: #6B5547; --on-secondary: #FFFFFF; --secondary-container: #F1E2D5; --on-secondary-container: #2E1F16;
   --tertiary: #B87D14; --tertiary-text: #8A5C0B; --tertiary-container: #FFDEA8; --on-tertiary-container: #2A1800;
   --background: #FBF8F3; --surface: #FBF8F3; --on-surface: #201A17;
   --surface-variant: #F0E7DF; --on-surface-variant: #52443D; --outline: #85736B;
