@@ -8,7 +8,7 @@
 :root {
   /* Kleurenschema (lightColorScheme uit Theme.kt) */
   --primary: #C85A32; --on-primary: #FFFFFF; --primary-container: #FFDBD0; --on-primary-container: #3A0B00;
-  --secondary: #6B5547; --on-secondary: #FFFFFF; --secondary-container: #F1E2D5; --on-secondary-container: #2E1F16;
+  --secondary: #4A6B53; --on-secondary: #FFFFFF; --secondary-container: #CCE8D1; --on-secondary-container: #062111;
   --tertiary: #B87D14; --tertiary-text: #8A5C0B; --tertiary-container: #FFDEA8; --on-tertiary-container: #2A1800;
   --background: #FBF8F3; --surface: #FBF8F3; --on-surface: #201A17;
   --surface-variant: #F0E7DF; --on-surface-variant: #52443D; --outline: #85736B;
@@ -23,23 +23,6 @@
   --nav-h: 80px;
   color-scheme: light;
 }
-:root.demo #toast { background: #3A2600; color: #FFFFFF; }
-:root.demo {
-  /* Alleen in ?demo: één thema. Geel alleen voor hoofdknop, vandaag, actieve tab en sterren; tekst zwart; de rest wit en grijs */
-  --primary: #F5B700; --on-primary: #1C1B18; --primary-container: #FFEBA6; --on-primary-container: #1C1B18;
-  --secondary: #5F5F5F; --on-secondary: #FFFFFF; --secondary-container: #EFEFEF; --on-secondary-container: #1C1B18;
-  --tertiary: #F5B700; --tertiary-text: #1C1B18; --tertiary-container: #EFEFEF; --on-tertiary-container: #1C1B18;
-  --background: #FFFFFF; --surface: #FFFFFF; --on-surface: #1C1B18;
-  --surface-variant: #F2F2F2; --on-surface-variant: #5F5F5F; --outline: #8E8E8E;
-  --surface-container-low: #F8F8F8; --surface-container: #F3F3F3; --surface-container-high: #ECECEC;
-  --outline-soft: rgba(0, 0, 0, .12); --outline-faint: rgba(0, 0, 0, .08);
-}
-:root.demo .tab.on .tab-ic { background: var(--primary-container); color: var(--on-primary-container); }
-:root.demo .dish-thumb.placeholder, :root.demo .amount, :root.demo .tile.accent, :root.demo .invite { background: var(--surface-variant); color: var(--on-surface); }
-:root.demo .tile.accent .tile-n, :root.demo .tile.accent .tile-l { color: var(--on-surface); }
-/* Geel is onleesbaar als tekst: overal waar de accentkleur als tekst dient, zwart */
-:root.demo a, :root.demo .btn:not(.primary):not(.tonal):not(.danger):not(.danger-ghost):not(.swap):not(.finish), :root.demo .link-btn, :root.demo .empty-ic, :root.demo .weeknav-kicker,
-:root.demo .day.today .day-name, :root.demo .dept-head, :root.demo .cook-kicker { color: var(--on-surface); }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
