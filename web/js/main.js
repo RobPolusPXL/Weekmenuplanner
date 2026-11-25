@@ -121,7 +121,7 @@ S.onChange(scheduleRender);
 async function boot() {
   const params = new URLSearchParams(location.search);
   const demo = params.has('demo');
-  if (demo) document.documentElement.classList.add('demo');
+  if (demo) { document.documentElement.classList.add('demo'); document.querySelector('meta[name=theme-color]')?.setAttribute('content', '#FFFFFF'); }
   if (!demo && !isConfigured()) {
     app.innerHTML = account.renderNotConfigured();
     return;

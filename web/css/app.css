@@ -23,14 +23,16 @@
   --nav-h: 80px;
   color-scheme: light;
 }
+:root.demo .snackbar { background: #15201A; color: #FFFFFF; }
 :root.demo {
-  /* Alleen in ?demo: wit, grijs en basilicumgroen */
-  --primary: #2F6B4F; --primary-container: #DCEDE3; --on-primary-container: #0D2A1B;
-  --secondary: #52525B; --secondary-container: #ECEDEC; --on-secondary-container: #18181B;
-  --background: #FFFFFF; --surface: #FFFFFF; --on-surface: #18181B;
-  --surface-variant: #F1F2F1; --on-surface-variant: #52525B; --outline: #8A8F8C;
-  --surface-container-low: #F8F8F8; --surface-container: #F3F4F3; --surface-container-high: #ECEDEC;
-  --outline-soft: rgba(24, 24, 27, .12); --outline-faint: rgba(24, 24, 27, .08);
+  /* Alleen in ?demo: wit met groen en zonnebloemgeel */
+  --primary: #1E7A4F; --primary-container: #D3F0DF; --on-primary-container: #062B18;
+  --secondary: #2F6B4F; --secondary-container: #C9EBD6; --on-secondary-container: #0B2E1C;
+  --tertiary: #E0A100; --tertiary-text: #8A6200; --tertiary-container: #FFE9A8; --on-tertiary-container: #2E2000;
+  --background: #FFFFFF; --surface: #FFFFFF; --on-surface: #15201A;
+  --surface-variant: #E4F3EA; --on-surface-variant: #45524B; --outline: #7F9188;
+  --surface-container-low: #F2FAF5; --surface-container: #E8F5ED; --surface-container-high: #DCEFE3;
+  --outline-soft: rgba(30, 122, 79, .18); --outline-faint: rgba(30, 122, 79, .12);
 }
 
 * { box-sizing: border-box; }
