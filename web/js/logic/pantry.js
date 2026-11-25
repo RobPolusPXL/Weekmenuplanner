@@ -109,7 +109,7 @@ export function reconcile(freeStock, currentReservations, needsPerWeek, weeksIn)
 
 // ---------- Reserveringen per dag ----------
 // Sleutel in stockReservations/{week}.items: "2026-11-25|tomatenpuree|stuk". Oude sleutels zonder datum
-// ("tomatenpuree|stuk") gelden voor de hele week en worden bij de eerste herverdeling omgezet.
+// ("tomatenpuree|stuk") komen van een oudere versie van de app en gaan terug naar de vrije voorraad.
 
 const DAY_KEY = /^(\d{4}-\d{2}-\d{2})\|(.*)$/;
 export const dayResKey = (date, key) => `${date}|${key}`;
@@ -148,17 +148,9 @@ export function reconcileDaily(freeStock, current, dayNeeds, today, weekOf) {
       if (date) pool[key] += q; else legacy.push({ w, key, q });
     }
   }
-  // Oude weekreservering: eerst toewijzen aan de voorbije dagen van die week (opgegeten), de rest terug.
-  const past = Object.keys(dayNeeds).filter(d => d < today).sort();
-  for (const { w, key, q } of legacy) {
-    let left = q;
-    for (const d of past) {
-      if (weekOf(d) !== w) continue;
-      const take = round3(Math.min(dayNeeds[d][key] ?? 0, left));
-      if (take > EPS) { put(d, key, take); left -= take; }
-    }
-    pool[key] += left;
-  }
+  // Sleutel zonder datum: geschreven door een oudere versie van de app die nog open stond. Die haalde het
+  // uit de vrije voorraad zonder de dagreserveringen te kennen; het gaat dus volledig terug naar de voorraad.
+  for (const { key, q } of legacy) pool[key] += q;
   for (const d of Object.keys(dayNeeds).filter(x => x >= today).sort()) {
     for (const [key, need] of Object.entries(dayNeeds[d])) {
       if (!(key in pool)) continue;

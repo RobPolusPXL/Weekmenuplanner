@@ -131,8 +131,21 @@ async function boot() {
   }
 }
 
+// Nieuwe versie online? Dan meteen herladen, zodat geen enkel open toestel met oude code op de gedeelde gegevens rekent.
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    const check = () => reg.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+    window.addEventListener('online', check);
+    setInterval(check, 10 * 60 * 1000);
+  }).catch(() => {});
 }
 
 boot();

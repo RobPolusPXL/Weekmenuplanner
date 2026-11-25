@@ -216,12 +216,16 @@ test('reconcileDaily: voorbije dagen zijn opgegeten, enkel vandaag en later gepl
   const weekOf = () => '2026-11-22';
   const K = 'tomatenpuree|stuk';
   const needs = { '2026-11-22': { [K]: 1 }, '2026-11-23': { [K]: 1 }, '2026-11-25': { [K]: 1 } };
-  // Oude weekreservering van 3 (zoals in Robs gegevens), vrij 2, vandaag woensdag 25/11.
-  const r = reconcileDaily({ [K]: 2 }, { '2026-11-22': { [K]: 3 } }, needs, '2026-11-25', weekOf);
-  assert.deepEqual(r.reservations['2026-11-22'], { [`2026-11-22|${K}`]: 1, [`2026-11-23|${K}`]: 1, [`2026-11-25|${K}`]: 1 });
+  // Start: vrij 3, niets gereserveerd, vandaag woensdag 25/11. Enkel woensdag (en later) wordt gereserveerd.
+  const r = reconcileDaily({ [K]: 3 }, {}, needs, '2026-11-25', weekOf);
+  assert.deepEqual(r.reservations['2026-11-22'], { [`2026-11-25|${K}`]: 1 });
   assert.equal(r.freeStock[K], 2);
   assert.deepEqual(plannedByKey(r.reservations, '2026-11-25', '2026-11-22'), { [K]: 1 });
-  assert.deepEqual(weekReservedByKey(r.reservations['2026-11-22']), { [K]: 3 });
+  assert.deepEqual(weekReservedByKey(r.reservations['2026-11-22']), { [K]: 1 });
+  // Een oudere versie schrijft er een weeksleutel overheen (zoals op 25/11 gebeurde): die gaat volledig terug.
+  const old = reconcileDaily({ [K]: 0 }, { '2026-11-22': { [K]: 2 } }, needs, '2026-11-25', weekOf);
+  assert.equal(old.freeStock[K], 1);
+  assert.deepEqual(old.reservations['2026-11-22'], { [`2026-11-25|${K}`]: 1 });
   // Een dag later: woensdag is opgegeten, niets meer gepland, vrij blijft 2.
   const r2 = reconcileDaily(r.freeStock, r.reservations, needs, '2026-11-26', weekOf);
   assert.equal(r2.freeStock[K], 2);
@@ -232,4 +236,8 @@ test('reconcileDaily: voorbije dagen zijn opgegeten, enkel vandaag en later gepl
   // Toekomstig gerecht schrappen: de reservering komt terug.
   const r4 = reconcileDaily(r.freeStock, r.reservations, { '2026-11-22': { [K]: 1 }, '2026-11-23': { [K]: 1 } }, '2026-11-25', weekOf);
   assert.equal(r4.freeStock[K], 3);
+  // Voorbije dag die al gereserveerd stond, blijft opgegeten.
+  const r5 = reconcileDaily({ [K]: 2 }, { '2026-11-22': { [`2026-11-23|${K}`]: 1 } }, needs, '2026-11-25', weekOf);
+  assert.equal(r5.freeStock[K], 1);
+  assert.equal(r5.reservations['2026-11-22'][`2026-11-23|${K}`], 1);
 });
