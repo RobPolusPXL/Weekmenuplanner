@@ -1,4 +1,4 @@
-# Maaltijdplanner – webapp (PWA)
+# Maaltijdplanner 2.0 – webapp (PWA)
 
 Dezelfde app als de Android-versie, maar in de browser: weekplanning, gerechten, boodschappen per afdeling,
 voorraad en statistieken. Gebruikt **dezelfde Firestore-database en documentvormen** als de Android-app,
