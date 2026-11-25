@@ -1,7 +1,7 @@
 // Service worker: de app opent ook zonder verbinding en toont updates meteen als er verbinding is.
 // Code: netwerk eerst, offline uit de cache. Lettertypes en iconen: cache eerst.
 // De gegevens zelf cachet Firestore (offline persistence), niet deze service worker.
-const V = 'maaltijdplanner-v20';
+const V = 'maaltijdplanner-v21';
 const CORE = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest',
   'js/main.js', 'js/ui.js', 'js/store.js', 'js/firebase-config.js',
