@@ -174,3 +174,18 @@ test('recept uit JSON-LD', () => {
   assert.equal(normalizeUrl(' http://voorbeeld.be/r '), 'https://voorbeeld.be/r');
   assert.equal(normalizeUrl('geen url'), null); assert.equal(normalizeUrl(''), null);
 });
+
+test('parseRecipeHtml leest stappen (HowToStep met HTML-lijst) en porties', () => {
+  const html = `<script type="application/ld+json">${JSON.stringify({
+    '@type': 'Recipe', name: 'Pasta', recipeYield: 2, totalTime: 'PT25M', recipeIngredient: ['200 gram Kip'],
+    recipeInstructions: [
+      { '@type': 'HowToStep', text: '<ul><li>Stap een.</li><li>Stap <span>twee</span>. </li></ul>' },
+      { '@type': 'HowToSection', itemListElement: [{ '@type': 'HowToStep', text: 'Stap drie.' }] },
+      'Stap vier.\nStap vijf.',
+    ],
+  })}</script>`;
+  const r = parseRecipeHtml(html);
+  assert.deepEqual(r.steps, ['Stap een.', 'Stap twee.', 'Stap drie.', 'Stap vier.', 'Stap vijf.']);
+  assert.equal(r.servings, 2);
+  assert.equal(parseRecipeHtml(html.replace('"recipeYield":2', '"recipeYield":["4 personen"]')).servings, 4);
+});

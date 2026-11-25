@@ -4,7 +4,7 @@ import * as S from '../store.js';
 import { state } from '../store.js';
 import { parseIngredient } from '../logic/parser.js';
 import { formatQuantity, capitalize } from '../logic/units.js';
-import { normalizeUrl } from '../logic/recipe.js';
+import { normalizeUrl, importRecipe } from '../logic/recipe.js';
 import { aiPrompt, parseAiRecipe, DEFAULT_SERVINGS } from '../logic/cooking.js';
 import { openCookMode } from './cook.js';
 import { dishMeta, emptyState } from './common.js';
@@ -136,6 +136,7 @@ export function openDishEditor(dish, { assignToDateId = null, onSaved = null } =
     servings: String(dish?.servings ?? DEFAULT_SERVINGS),
     stepsText: (dish?.steps ?? []).join('\n'),
     saving: false,
+    fetching: false,
   };
   const original = new Map((dish?.ingredients ?? []).map(i => [i.raw, i]));
 
@@ -145,6 +146,28 @@ export function openDishEditor(dish, { assignToDateId = null, onSaved = null } =
     const o = original.get(l);
     return o && o.name ? o : parseIngredient(l);
   });
+
+  const applyRecipe = r => {
+    if (dish) {
+      // Bestaand gerecht: naam, type, foto en ingrediënten blijven; enkel lege velden en de bereiding worden aangevuld.
+      if (!f.ingredientsText.trim()) f.ingredientsText = r.ingredients.join('\n');
+      if (r.steps.length) f.stepsText = r.steps.join('\n');
+      if (r.prepMinutes && !f.prep) f.prep = String(r.prepMinutes);
+      if (r.servings && !dish.servings) f.servings = String(r.servings);
+      if (r.url && !f.recipeUrl.trim()) f.recipeUrl = r.url;
+      return;
+    }
+    if (r.name) f.name = r.name;
+    if (r.type) {
+      if (S.dishTypes().map(t => t.toLowerCase()).includes(r.type)) f.type = r.type;
+      else { f.type = '__new'; f.newType = r.type; }
+    }
+    if (r.prepMinutes) f.prep = String(r.prepMinutes);
+    if (r.servings) f.servings = String(r.servings);
+    f.ingredientsText = r.ingredients.join('\n');
+    f.stepsText = r.steps.join('\n');
+    if (r.url) f.recipeUrl = r.url;
+  };
 
   openSheet({
     title: dish ? 'Gerecht bewerken' : 'Nieuw gerecht',
@@ -168,6 +191,7 @@ export function openDishEditor(dish, { assignToDateId = null, onSaved = null } =
         ${parsed.length ? `<div class="parsed">${parsed.map(i => `<span class="chip">${esc(capitalize(i.name))}${i.quantity != null ? ` · ${esc(formatQuantity(i.quantity, i.unit))}` : ''}</span>`).join('')}</div>` : ''}
         <label class="field"><span>Receptlink</span>
           <div class="input-row"><input id="f-url" name="recipeUrl" type="url" inputmode="url" value="${esc(f.recipeUrl)}" placeholder="https://…">
+            <button type="button" class="btn" data-action="fetch-url" ${f.fetching || !f.recipeUrl.trim() ? 'disabled' : ''}>${icon('link')}${f.fetching ? 'Ophalen…' : 'Ophalen'}</button>
           </div></label>
         <label class="field"><span>Bereiding <em class="muted">(één stap per regel; tijden zoals "10 minuten" worden timers in de kookmodus)</em></span>
           <textarea id="f-steps" name="steps" rows="6">${esc(f.stepsText)}</textarea></label>
@@ -192,7 +216,7 @@ export function openDishEditor(dish, { assignToDateId = null, onSaved = null } =
       else if (el.id === 'f-servings') f.servings = el.value.replace(/\D/g, '');
       else if (el.id === 'f-steps') f.stepsText = el.value;
       else if (el.id === 'f-ing') { f.ingredientsText = el.value; refreshSheets(); }
-      else if (el.id === 'f-url') f.recipeUrl = el.value;
+      else if (el.id === 'f-url') { const had = f.recipeUrl.trim(); f.recipeUrl = el.value; if (!had !== !el.value.trim()) refreshSheets(); }
       else if (el.id === 'f-note') f.note = el.value;
       else if (el.id === 'f-photo' && el.files?.[0]) {
         try { f.photoUrl = await photoToDataUrl(el.files[0]); refreshSheets(); } catch (e) { S.toast(e.message || 'Kon foto niet laden.'); }
@@ -205,28 +229,19 @@ export function openDishEditor(dish, { assignToDateId = null, onSaved = null } =
         title: 'Gerecht verwijderen', message: `'${dish.name}' verwijderen? Bestaande weekplanningen blijven behouden.`,
         onConfirm: () => { S.deleteDish(dish); closeSheet(); },
       });
-      else if (a === 'ai-import' && dish) openAiImport(r => {
-        // Bestaand gerecht: naam, type, foto en ingrediënten blijven; enkel lege velden en de bereiding worden aangevuld.
-        if (!f.ingredientsText.trim()) f.ingredientsText = r.ingredients.join('\n');
-        if (r.steps.length) f.stepsText = r.steps.join('\n');
-        if (r.prepMinutes && !f.prep) f.prep = String(r.prepMinutes);
-        if (r.servings && (!dish.servings)) f.servings = String(r.servings);
-        if (r.url && !f.recipeUrl.trim()) f.recipeUrl = r.url;
-        refreshSheets();
-      }, existingSource(f), true);
-      else if (a === 'ai-import') openAiImport(r => {
-        if (r.name) f.name = r.name;
-        if (r.type) {
-          if (S.dishTypes().map(t => t.toLowerCase()).includes(r.type)) f.type = r.type;
-          else { f.type = '__new'; f.newType = r.type; }
-        }
-        if (r.prepMinutes) f.prep = String(r.prepMinutes);
-        if (r.servings) f.servings = String(r.servings);
-        f.ingredientsText = r.ingredients.join('\n');
-        f.stepsText = r.steps.join('\n');
-        if (r.url) f.recipeUrl = r.url;
-        refreshSheets();
-      });
+      else if (a === 'ai-import') openAiImport(r => { applyRecipe(r); refreshSheets(); }, dish ? existingSource(f) : '', !!dish);
+      else if (a === 'fetch-url') {
+        f.fetching = true; refreshSheets();
+        try {
+          const r = await importRecipe(f.recipeUrl);
+          applyRecipe({ name: r.name, type: null, prepMinutes: r.totalMinutes, servings: r.servings,
+            ingredients: r.ingredientLines, steps: r.steps, url: r.url });
+          S.toast(dish
+            ? `${r.steps.length} stappen opgehaald. Naam, type, foto en ingrediënten bleven ongewijzigd. Kijk na en sla op.`
+            : `${r.ingredientLines.length} ingrediënten en ${r.steps.length} stappen opgehaald. Kijk na en sla op.`);
+        } catch (e) { S.toast(e.message); }
+        f.fetching = false; refreshSheets();
+      }
       else if (a === 'cook-dish' && dish) openCookMode({ dishId: dish.id });
     },
     onSubmit: async () => {

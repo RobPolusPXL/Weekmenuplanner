@@ -3,7 +3,7 @@
 const SCRIPT_RE = /<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
 const DURATION_RE = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:\d+S)?)?$/i;
 
-/** → { name, ingredientLines, totalMinutes } of null. */
+/** → { name, ingredientLines, totalMinutes, steps, servings } of null. */
 export function parseRecipeHtml(html) {
   for (const m of String(html).matchAll(SCRIPT_RE)) {
     const json = m[1].trim();
@@ -18,6 +18,8 @@ export function parseRecipeHtml(html) {
       name: cleanText(typeof recipe.name === 'string' ? recipe.name : '') || null,
       ingredientLines: lines,
       totalMinutes: readMinutes(recipe),
+      steps: readSteps(recipe.recipeInstructions, 0).slice(0, 60),
+      servings: readServings(recipe.recipeYield),
     };
   }
   return null;
@@ -52,6 +54,38 @@ function readIngredients(recipe) {
   const src = recipe.recipeIngredient ?? recipe.ingredients;
   const raw = Array.isArray(src) ? src.map(x => (typeof x === 'string' ? x : '')) : typeof src === 'string' ? src.split('\n') : [];
   return raw.map(cleanText).filter(Boolean);
+}
+
+// recipeInstructions: tekst, lijst van teksten, HowToStep { text } of HowToSection { itemListElement }.
+// Een stap met een HTML-lijst wordt per <li> opgesplitst, zoals de stappen op de pagina zelf.
+function readSteps(node, depth) {
+  if (depth > 4 || node == null) return [];
+  if (typeof node === 'string') return splitStepText(node);
+  if (Array.isArray(node)) return node.flatMap(n => readSteps(n, depth + 1));
+  if (typeof node === 'object') {
+    if (node.itemListElement) return readSteps(node.itemListElement, depth + 1);
+    return splitStepText(typeof node.text === 'string' ? node.text : typeof node.name === 'string' ? node.name : '');
+  }
+  return [];
+}
+
+function splitStepText(text) {
+  return String(text)
+    .split(/<\/li>|<\/p>|<br\s*\/?>|\n/i)
+    .map(t => cleanText(t).replace(/\s+([.,;:!?])/g, '$1'))
+    .filter(Boolean);
+}
+
+function readServings(yieldValue) {
+  const values = Array.isArray(yieldValue) ? yieldValue : [yieldValue];
+  for (const v of values) {
+    const m = /\d+/.exec(String(v ?? ''));
+    if (m) {
+      const n = Number(m[0]);
+      if (n >= 1 && n <= 20) return n;
+    }
+  }
+  return null;
 }
 
 function readMinutes(recipe) {
@@ -90,22 +124,22 @@ export function normalizeUrl(raw) {
   return u.length > 8 && u.includes('.') ? u : null;
 }
 
-/**
- * Probeert een receptpagina op te halen. De meeste receptsites laten dat vanuit een browser niet toe
- * (CORS); dan komt er een duidelijke foutmelding in plaats van een stille mislukking.
- */
-export async function importRecipe(url) {
+/** De Cloudflare Worker die receptpagina's ophaalt (een browser mag dat niet rechtstreeks, CORS). */
+export const RECIPE_PROXY = 'https://recept-proxy.rob-polus.workers.dev/';
+
+/** Haalt een receptpagina op via de proxy en leest het recept eruit. Gooit een Fout met uitleg. */
+export async function importRecipe(url, fetchFn = fetch) {
   const clean = normalizeUrl(url);
   if (!clean) throw new Error('Dat is geen geldige link.');
   let html;
   try {
-    const res = await fetch(clean, { mode: 'cors', credentials: 'omit' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const res = await fetchFn(`${RECIPE_PROXY}?url=${encodeURIComponent(clean)}`, { credentials: 'omit' });
     html = await res.text();
-  } catch {
-    throw new Error('Deze site laat niet toe dat een webapp het recept ophaalt. Kopieer de ingrediënten en plak ze in het veld Ingrediënten.');
+    if (!res.ok) throw new Error(html);
+  } catch (e) {
+    throw new Error(`Ophalen lukte niet${e?.message ? ` (${e.message.slice(0, 80)})` : ''}.`);
   }
   const recipe = parseRecipeHtml(html);
-  if (!recipe) throw new Error('Geen recept gevonden op die pagina.');
+  if (!recipe) throw new Error('Op deze pagina staat geen recept dat de app kan lezen.');
   return { ...recipe, url: clean };
 }
