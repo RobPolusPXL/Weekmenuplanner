@@ -25,21 +25,15 @@
 }
 :root.demo #toast { background: #3A2600; color: #FFFFFF; }
 :root.demo {
-  /* Alleen in ?demo: warm geel en oker op wit */
-  --primary: #9C6500; --on-primary: #FFFFFF; --primary-container: #FFE29A; --on-primary-container: #3A2600;
-  --secondary: #7A5A12; --on-secondary: #FFFFFF; --secondary-container: #FFEDB8; --on-secondary-container: #3A2A00;
-  --tertiary: #E0A100; --tertiary-text: #8A6200; --tertiary-container: #FFD966; --on-tertiary-container: #3A2600;
-  --background: #FFFFFF; --surface: #FFFFFF; --on-surface: #24190A;
-  --surface-variant: #FFF1C9; --on-surface-variant: #5E4B2A; --outline: #A08A5E;
-  --surface-container-low: #FFFAEB; --surface-container: #FFF3CF; --surface-container-high: #FFEAB0;
-  --outline-soft: rgba(156, 101, 0, .22); --outline-faint: rgba(156, 101, 0, .14);
+  /* Alleen in ?demo: Material-thema (Vibrant) uit één okerkleur #E0A100; achtergrond wit, vlakken neutraal grijs */
+  --primary: #7C5800; --on-primary: #FFFFFF; --primary-container: #FFDEA8; --on-primary-container: #5E4200;
+  --secondary: #6D5D2E; --on-secondary: #FFFFFF; --secondary-container: #F8E1A6; --on-secondary-container: #544519;
+  --tertiary: #695F1D; --tertiary-text: #695F1D; --tertiary-container: #F3E394; --on-tertiary-container: #514705;
+  --background: #FFFFFF; --surface: #FFFFFF; --on-surface: #221A0D;
+  --surface-variant: #F2F2F2; --on-surface-variant: #514531; --outline: #83755F;
+  --surface-container-low: #F8F8F8; --surface-container: #F3F3F3; --surface-container-high: #ECECEC;
+  --outline-soft: rgba(131, 117, 95, .25); --outline-faint: rgba(131, 117, 95, .16);
 }
-:root.demo .chip.type[data-c="0"] { background: #FFE29A; color: #3A2600; }
-:root.demo .chip.type[data-c="1"] { background: #FFD3A3; color: #4D2800; }
-:root.demo .chip.type[data-c="2"] { background: #E8EAB2; color: #3A3D00; }
-:root.demo .chip.type[data-c="3"] { background: #F7DFA8; color: #4A3500; }
-:root.demo .chip.type[data-c="4"] { background: #FFF0B8; color: #4A3A00; }
-:root.demo .chip.type[data-c="5"] { background: #F2D7B5; color: #4A2E12; }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }

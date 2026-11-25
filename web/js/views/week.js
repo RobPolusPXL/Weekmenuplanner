@@ -5,7 +5,7 @@ import { state } from '../store.js';
 import { today, dayName, belgian, shortBelgian, weekDates } from '../logic/dates.js';
 import { DAY_KINDS, kindOf } from '../logic/planner.js';
 import { capitalize } from '../logic/units.js';
-import { weekNav, dishMeta, typeColor } from './common.js';
+import { weekNav, dishMeta } from './common.js';
 import { openDishEditor, openDishPicker } from './dishes.js';
 import { openCookMode } from './cook.js';
 import { portionFactor, scaledAmount, DEFAULT_SERVINGS } from '../logic/cooking.js';
@@ -32,7 +32,7 @@ function dayCard(id, day, isToday, pastWeek) {
   let body;
   if (kind === 'koken' && day.dishSnapshot) {
     const snap = day.dishSnapshot;
-    body = `<span class="day-dish">${esc(snap.name)}</span>${snap.type ? `<span class="chip type" data-c="${typeColor(snap.type)}">${esc(snap.type)}</span>` : ''}`;
+    body = `<span class="day-dish">${esc(snap.name)}</span>${snap.type ? `<span class="chip type">${esc(snap.type)}</span>` : ''}`;
   } else if (kind !== 'leeg') {
     body = `<span class="day-marker">${icon(KIND_ICON[kind])}${esc(DAY_KINDS[kind])}</span>${day?.note ? `<span class="day-note">${esc(day.note)}</span>` : ''}`;
   } else {

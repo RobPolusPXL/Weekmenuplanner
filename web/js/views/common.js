@@ -17,14 +17,8 @@ export function weekNav(subtitle) {
   </div>`;
 }
 
-export function typeColor(type) {
-  let h = 0;
-  for (const ch of String(type || '').toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return h % 6;
-}
-
 export function dishMeta(dish, { withStars = true } = {}) {
-  const parts = [`<span class="chip type" data-c="${typeColor(dish.type)}">${esc(dish.type)}</span>`];
+  const parts = [`<span class="chip type">${esc(dish.type)}</span>`];
   if (dish.prepMinutes) parts.push(`<span class="meta">${icon('clock')}${esc(formatPrepTime(dish.prepMinutes))}</span>`);
   if (withStars && dish.rating) parts.push(stars(dish.rating));
   return `<div class="dish-meta">${parts.join('')}</div>`;
