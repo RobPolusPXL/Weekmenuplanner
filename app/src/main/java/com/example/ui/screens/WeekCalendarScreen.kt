@@ -126,7 +126,7 @@ fun WeekCalendarScreen(
 
         // Weekwisselaar + Genereer hele week kaart
         WeekSwitcherHeaderCard(
-            weekStart = uiState.selectedWeekStart,
+            weekSunday = uiState.selectedWeekSunday,
             isCurrentWeek = uiState.isCurrentWeekSelected,
             isPastWeek = uiState.isPastWeekSelected,
             onPreviousWeek = onPreviousWeek,
@@ -297,7 +297,7 @@ fun WeekCalendarScreen(
 
 @Composable
 fun WeekSwitcherHeaderCard(
-    weekStart: MealPlannerLogic.SimpleDate,
+    weekSunday: MealPlannerLogic.SimpleDate,
     isCurrentWeek: Boolean,
     isPastWeek: Boolean,
     onPreviousWeek: () -> Unit,
@@ -353,7 +353,7 @@ fun WeekSwitcherHeaderCard(
                         )
                     }
                     Text(
-                        text = MealPlannerLogic.formatWeekHeader(weekStart),
+                        text = MealPlannerLogic.formatWeekHeader(weekSunday),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
