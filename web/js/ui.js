@@ -33,6 +33,7 @@ const P = {
   moon: '<path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/>',
   calendarCopy: '<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M12 12.5v5M9.5 15h5"/>',
   play: '<path d="M8 5.5v13l10.5-6.5z"/>',
+  pause: '<path d="M8.5 5.5v13M15.5 5.5v13"/>',
   minus: '<path d="M5 12h14"/>',
   share: '<circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="M8.2 10.8l7.6-4M8.2 13.2l7.6 4"/>',
   chef: '<path d="M7 14.5a4 4 0 0 1-.6-7.9A5 5 0 0 1 12 3.5a5 5 0 0 1 5.6 3.1A4 4 0 0 1 17 14.5"/><path d="M7 14.5V20h10v-5.5M7 17h10"/>',

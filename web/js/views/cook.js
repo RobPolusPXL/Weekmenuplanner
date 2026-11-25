@@ -7,7 +7,11 @@ import { capitalize } from '../logic/units.js';
 
 // ---------- Timers (blijven lopen als je van stap wisselt of het paneel sluit) ----------
 
-const timers = []; // { id, label, end, done, session, step }
+const timers = []; // { id, label, end, done, session, step, paused, left }
+const STEP_SECONDS = 30;
+
+/** Resterende seconden; een gepauzeerde timer onthoudt wat er over was. */
+const remaining = t => (t.paused ? t.left : Math.max(0, (t.end - Date.now()) / 1000));
 let tickHandle = null;
 let audio = null;
 let alarmHandle = null;
@@ -52,13 +56,13 @@ function stopAlarm() {
 function tick() {
   const now = Date.now();
   for (const t of timers) {
-    if (!t.done && now >= t.end) {
+    if (!t.done && !t.paused && now >= t.end) {
       t.done = true;
       S.toast(`Timer klaar: ${t.label}`);
     }
   }
   if (ringing()) startAlarm(); else if (alarmHandle) { clearInterval(alarmHandle); alarmHandle = null; }
-  if (!timers.some(t => !t.done) && !ringing()) { clearInterval(tickHandle); tickHandle = null; }
+  if (!timers.some(t => !t.done && !t.paused) && !ringing()) { clearInterval(tickHandle); tickHandle = null; }
   refreshSheets();
 }
 
@@ -69,17 +73,36 @@ function startTimer(label, seconds, session, step) {
   refreshSheets();
 }
 
+/** +30 s, -30 s, pauzeren en verder laten lopen. */
+function adjustTimer(id, action) {
+  const t = timers.find(x => x.id === id);
+  if (!t || t.done) return;
+  if (action === 'timer-pause') { t.left = remaining(t); t.paused = true; }
+  else if (action === 'timer-resume') { t.end = Date.now() + t.left * 1000; t.paused = false; tickHandle ||= setInterval(tick, 1000); }
+  else {
+    const delta = action === 'timer-plus' ? STEP_SECONDS : -STEP_SECONDS;
+    if (delta < 0 && remaining(t) <= STEP_SECONDS) return;
+    if (t.paused) t.left += delta; else t.end += delta * 1000;
+  }
+}
+
 function timersHtml(session) {
   if (!timers.length) return '';
-  const now = Date.now();
   return `<div class="timers">${timers.map(t => {
-    const left = Math.max(0, (t.end - now) / 1000);
-    return `<div class="timer${t.done ? ' done' : ''}">
+    const left = remaining(t);
+    const id = `data-id="${t.id}"`;
+    const controls = t.done ? '' : `<div class="timer-ctrl">
+        <button class="timer-step" data-action="timer-minus" ${id} aria-label="30 seconden minder" ${left <= STEP_SECONDS ? 'disabled' : ''}>−30"</button>
+        <button class="icon-btn small" data-action="${t.paused ? 'timer-resume' : 'timer-pause'}" ${id} aria-label="${t.paused ? 'Verder' : 'Pauze'}">${icon(t.paused ? 'play' : 'pause')}</button>
+        <button class="timer-step" data-action="timer-plus" ${id} aria-label="30 seconden meer">+30"</button>
+      </div>`;
+    return `<div class="timer${t.done ? ' done' : ''}${t.paused ? ' paused' : ''}">
       ${icon(t.done ? 'bell' : 'timer')}${t.session === session
         ? `<button class="timer-label timer-goto" data-action="timer-goto" data-step="${t.step}">${esc(t.label)}</button>`
         : `<span class="timer-label">${esc(t.label)}</span>`}
       <span class="timer-left">${t.done ? 'Klaar' : esc(formatTimer(left))}</span>
       <button class="icon-btn small" data-action="timer-stop" data-id="${t.id}" aria-label="Timer weg">${icon('close')}</button>
+      ${controls}
     </div>`;
   }).join('')}${ringing() ? `<button class="btn danger full" data-action="alarm-off">${icon('bell')}Alarm stoppen</button>` : ''}</div>`;
 }
@@ -192,6 +215,7 @@ export function openCookMode({ dishId = null, dateId = null }) {
       else if (a === 'return') { step = returnTo ?? step; returnTo = null; }
       else if (a === 'done') { closeSheet(); return; }
       else if (a === 'timer') startTimer(el.dataset.label, Number(el.dataset.seconds), session, step);
+      else if (['timer-plus', 'timer-minus', 'timer-pause', 'timer-resume'].includes(a)) adjustTimer(el.dataset.id, a);
       else if (a === 'timer-stop') {
         const i = timers.findIndex(t => t.id === el.dataset.id);
         if (i >= 0) timers.splice(i, 1);
