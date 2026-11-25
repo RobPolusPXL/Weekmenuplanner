@@ -164,7 +164,7 @@ export function openDishEditor(dish, { assignToDateId = null, onSaved = null } =
         ${f.type === '__new' ? `<label class="field"><span>Nieuw type</span><input id="f-newtype" name="newType" maxlength="40" value="${esc(f.newType)}" placeholder="bv. stoofpot"></label>` : ''}
         <label class="field"><span>Ingrediënten <em class="muted">(één per regel, bv. "500 g gehakt")</em></span>
           <textarea id="f-ing" name="ingredients" rows="7">${esc(f.ingredientsText)}</textarea></label>
-        ${dish ? '' : `<button type="button" class="btn ai-btn" data-action="ai-import">${icon('sparkle')}Recept importeren met AI</button>`}
+        <button type="button" class="btn ai-btn" data-action="ai-import">${icon('sparkle')}${dish ? 'Bereiding aanvullen met AI' : 'Recept importeren met AI'}</button>
         ${parsed.length ? `<div class="parsed">${parsed.map(i => `<span class="chip">${esc(capitalize(i.name))}${i.quantity != null ? ` · ${esc(formatQuantity(i.quantity, i.unit))}` : ''}</span>`).join('')}</div>` : ''}
         <label class="field"><span>Receptlink</span>
           <div class="input-row"><input id="f-url" name="recipeUrl" type="url" inputmode="url" value="${esc(f.recipeUrl)}" placeholder="https://…">
@@ -205,6 +205,15 @@ export function openDishEditor(dish, { assignToDateId = null, onSaved = null } =
         title: 'Gerecht verwijderen', message: `'${dish.name}' verwijderen? Bestaande weekplanningen blijven behouden.`,
         onConfirm: () => { S.deleteDish(dish); closeSheet(); },
       });
+      else if (a === 'ai-import' && dish) openAiImport(r => {
+        // Bestaand gerecht: naam, type, foto en ingrediënten blijven; enkel lege velden en de bereiding worden aangevuld.
+        if (!f.ingredientsText.trim()) f.ingredientsText = r.ingredients.join('\n');
+        if (r.steps.length) f.stepsText = r.steps.join('\n');
+        if (r.prepMinutes && !f.prep) f.prep = String(r.prepMinutes);
+        if (r.servings && (!dish.servings)) f.servings = String(r.servings);
+        if (r.url && !f.recipeUrl.trim()) f.recipeUrl = r.url;
+        refreshSheets();
+      }, existingSource(f), true);
       else if (a === 'ai-import') openAiImport(r => {
         if (r.name) f.name = r.name;
         if (r.type) {
@@ -272,10 +281,20 @@ function openTypesSheet() {
 
 // ---------- Recept importeren via een AI-chat ----------
 
-function openAiImport(onResult) {
-  const st = { source: '', answer: '', error: '', copied: false };
+/** Voor een bestaand gerecht: wat de AI al moet weten (link of naam met ingrediënten). */
+function existingSource(f) {
+  const parts = [];
+  if (f.recipeUrl.trim()) parts.push(f.recipeUrl.trim());
+  parts.push(`Gerecht: ${f.name.trim()}`);
+  if (f.ingredientsText.trim()) parts.push(`Ingrediënten:\n${f.ingredientsText.trim()}`);
+  parts.push('Geef vooral de bereiding in duidelijke stappen. Gebruik deze ingrediënten.');
+  return parts.join('\n');
+}
+
+function openAiImport(onResult, initialSource = '', existing = false) {
+  const st = { source: initialSource, answer: '', error: '', copied: false };
   openSheet({
-    title: 'Recept importeren met AI',
+    title: existing ? 'Bereiding aanvullen met AI' : 'Recept importeren met AI',
     wide: true,
     render: () => `<ol class="ai-steps">
       <li><span><strong>Link of recepttekst</strong></span>
@@ -303,7 +322,9 @@ function openAiImport(onResult) {
           const url = st.source.trim().split(/\s+/).length === 1 ? normalizeUrl(st.source) : null;
           closeSheet();
           onResult({ ...r, url });
-          S.toast(`${r.ingredients.length} ingrediënten en ${r.steps.length} stappen ingevuld. Kijk ze na en sla op.`);
+          S.toast(existing
+            ? `${r.steps.length} stappen ingevuld. Naam, type, foto en ingrediënten bleven ongewijzigd. Kijk na en sla op.`
+            : `${r.ingredients.length} ingrediënten en ${r.steps.length} stappen ingevuld. Kijk ze na en sla op.`);
         } catch (e) { st.error = e.message; refreshSheets(); }
       }
     },
